@@ -27,6 +27,7 @@ import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.common.util.Size
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.Presentation
+import androidx.media3.effect.StaticOverlaySettings
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
@@ -125,13 +126,13 @@ class Exporter(private val context: Context) {
             override fun getOutputSize(inputSizes: List<Size>): Size = Size(w, h)
 
             override fun getOverlaySettings(inputId: Int, presentationTimeUs: Long): OverlaySettings {
-                if (inputId == 0 || inputId - 1 >= visual.size) return OverlaySettings.Builder().build()
+                if (inputId == 0 || inputId - 1 >= visual.size) return StaticOverlaySettings.Builder().build()
                 val tMs = presentationTimeUs / 1000
                 val clip = visual[inputId - 1].clips.firstOrNull { it.isActiveAt(tMs) }
-                    ?: return OverlaySettings.Builder().setAlphaScale(0f).build()
+                    ?: return StaticOverlaySettings.Builder().setAlphaScale(0f).build()
                 val rel = tMs - clip.startMs
                 val s = clip.valueAt(Prop.SCALE, rel)
-                return OverlaySettings.Builder()
+                return StaticOverlaySettings.Builder()
                     .setBackgroundFrameAnchor(clip.valueAt(Prop.X, rel), -clip.valueAt(Prop.Y, rel))
                     .setScale(s, s)
                     .setRotationDegrees(-clip.valueAt(Prop.ROTATION, rel))
