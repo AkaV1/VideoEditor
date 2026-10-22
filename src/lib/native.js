@@ -11,6 +11,25 @@ export const isNative = (() => {
 
 const Filesystem = registerPlugin('Filesystem');
 const Share = registerPlugin('Share');
+const Gallery = registerPlugin('Gallery'); // plugin propio (se añade al proyecto Android en patch-android.mjs)
+
+const CHUNK = 3 * 512 * 1024; // múltiplo de 3 → cada trozo es base64 válido por sí solo
+
+/** Guarda el video en la galería (Movies/LineCut) sin pasar por la hoja de compartir. */
+export async function saveToGallery(blob, filename, onProgress) {
+  if (!isNative) throw new Error('Solo disponible en la app');
+  await Gallery.begin({ name: filename, mime: blob.type || 'video/mp4' });
+  try {
+    for (let off = 0; off < blob.size; off += CHUNK) {
+      await Gallery.append({ data: await blobToBase64(blob.slice(off, off + CHUNK)) });
+      onProgress?.(Math.min(1, (off + CHUNK) / blob.size));
+    }
+    return await Gallery.finish();
+  } catch (e) {
+    await Gallery.abort().catch(() => {});
+    throw e;
+  }
+}
 
 const blobToBase64 = (blob) =>
   new Promise((resolve, reject) => {

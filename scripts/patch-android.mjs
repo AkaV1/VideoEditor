@@ -69,4 +69,123 @@ if (!styles.includes('windowOptOutEdgeToEdgeEnforcement')) {
   styles = styles.replace(/(<style name="AppTheme\.NoActionBar"[^>]*>)/, `$1${extra}`);
   writeFileSync(stylesPath, styles);
 }
+// --- plugin nativo «Gallery»: guarda el video exportado en la galería (MediaStore)
+const appId = JSON.parse(readFileSync(join(root, 'capacitor.config.json'), 'utf8')).appId;
+const javaDir = join(root, 'android/app/src/main/java', ...appId.split('.'));
+mkdirSync(javaDir, { recursive: true });
+writeFileSync(
+  join(javaDir, 'GalleryPlugin.java'),
+  `package ${appId};
+
+import android.content.ContentResolver;
+import android.content.ContentValues;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
+import android.provider.MediaStore;
+import android.util.Base64;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+import java.io.OutputStream;
+
+@CapacitorPlugin(name = "Gallery")
+public class GalleryPlugin extends Plugin {
+    private OutputStream out;
+    private Uri uri;
+
+    private void cleanup(boolean delete) {
+        try { if (out != null) out.close(); } catch (Exception ignored) {}
+        out = null;
+        if (delete && uri != null) {
+            try { getContext().getContentResolver().delete(uri, null, null); } catch (Exception ignored) {}
+        }
+        uri = null;
+    }
+
+    @PluginMethod
+    public void begin(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            call.reject("Esta versión de Android requiere guardar con Compartir");
+            return;
+        }
+        cleanup(true);
+        try {
+            String name = call.getString("name", "LineCut.mp4");
+            String mime = call.getString("mime", "video/mp4");
+            ContentResolver r = getContext().getContentResolver();
+            ContentValues v = new ContentValues();
+            v.put(MediaStore.Video.Media.DISPLAY_NAME, name);
+            v.put(MediaStore.Video.Media.MIME_TYPE, mime);
+            v.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/LineCut");
+            v.put(MediaStore.Video.Media.IS_PENDING, 1);
+            uri = r.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, v);
+            if (uri == null) throw new Exception("No se pudo crear el archivo");
+            out = r.openOutputStream(uri);
+            if (out == null) throw new Exception("No se pudo abrir el archivo");
+            call.resolve();
+        } catch (Exception e) {
+            cleanup(true);
+            call.reject(e.getMessage() == null ? "Error al crear el archivo" : e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void append(PluginCall call) {
+        try {
+            if (out == null) throw new Exception("No hay archivo abierto");
+            out.write(Base64.decode(call.getString("data", ""), Base64.DEFAULT));
+            call.resolve();
+        } catch (Exception e) {
+            call.reject(e.getMessage() == null ? "Error al escribir" : e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void finish(PluginCall call) {
+        try {
+            if (out == null || uri == null) throw new Exception("No hay archivo abierto");
+            out.flush();
+            out.close();
+            out = null;
+            ContentValues v = new ContentValues();
+            v.put(MediaStore.Video.Media.IS_PENDING, 0);
+            getContext().getContentResolver().update(uri, v, null, null);
+            JSObject res = new JSObject();
+            res.put("uri", uri.toString());
+            uri = null;
+            call.resolve(res);
+        } catch (Exception e) {
+            cleanup(true);
+            call.reject(e.getMessage() == null ? "Error al finalizar" : e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void abort(PluginCall call) {
+        cleanup(true);
+        call.resolve();
+    }
+}
+`,
+);
+writeFileSync(
+  join(javaDir, 'MainActivity.java'),
+  `package ${appId};
+
+import android.os.Bundle;
+import com.getcapacitor.BridgeActivity;
+
+public class MainActivity extends BridgeActivity {
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(GalleryPlugin.class);
+        super.onCreate(savedInstanceState);
+    }
+}
+`,
+);
+
 console.log('Proyecto Android personalizado para LineCut');

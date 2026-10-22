@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LuX, LuDownload, LuCircleCheck, LuTriangleAlert } from 'react-icons/lu';
 import { useStore, setProject, projectSize } from '../store/store.js';
 import { RESOLUTIONS, FPS_OPTIONS } from '../lib/presets.js';
 import { startExport, cancelExport, closeExportDialog } from '../lib/exporter.js';
-import { saveVideo, isNative } from '../lib/native.js';
+import { saveVideo, saveToGallery, isNative } from '../lib/native.js';
 import { timecode } from '../lib/time.js';
 import { Segmented } from './ui.jsx';
 
@@ -14,6 +14,26 @@ export default function ExportDialog() {
   const project = useStore((s) => s.project);
   const duration = useStore((s) => s.duration);
   const [msg, setMsg] = useState('');
+  const [gal, setGal] = useState(null); // null | {state:'saving'|'ok'|'err', text, p}
+  const savedFor = useRef(null);
+
+  // En la app, al terminar la exportación el video va directo a la galería.
+  const result = ex?.phase === 'done' ? ex.result : null;
+  useEffect(() => {
+    if (!result) {
+      savedFor.current = null;
+      setGal(null);
+      setMsg('');
+      return;
+    }
+    if (!isNative || savedFor.current === result.url) return;
+    savedFor.current = result.url;
+    setGal({ state: 'saving', p: 0 });
+    saveToGallery(result.blob, result.name, (p) => setGal({ state: 'saving', p }))
+      .then(() => setGal({ state: 'ok' }))
+      .catch((e) => setGal({ state: 'err', text: e?.message || String(e) }));
+  }, [result]);
+
   if (!ex) return null;
 
   const [bw, bh] = projectSize(project);
@@ -87,6 +107,19 @@ export default function ExportDialog() {
             <div className="text-[12px] text-muted">
               {ex.result.name} · {ex.result.W}×{ex.result.H} · {ex.result.fps} fps · {mb(ex.result.size)}
             </div>
+            {isNative && gal && (
+              <div
+                className={`rounded-lg border px-3 py-2 text-[12.5px] ${
+                  gal.state === 'ok' ? 'border-accent/40 bg-accent/10 text-accent'
+                    : gal.state === 'err' ? 'border-[#e8756f]/40 text-[#e8756f]'
+                    : 'border-line text-[#cfcfd8]'
+                }`}
+              >
+                {gal.state === 'saving' && `Guardando en la galería… ${Math.round((gal.p ?? 0) * 100)}%`}
+                {gal.state === 'ok' && 'Guardado en la galería (carpeta Movies/LineCut)'}
+                {gal.state === 'err' && `No se pudo guardar en la galería: ${gal.text}. Usa «Compartir» para guardarlo.`}
+              </div>
+            )}
             <button
               onClick={async () => {
                 try {
@@ -97,7 +130,7 @@ export default function ExportDialog() {
               }}
               className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-accent text-[14px] font-semibold text-black hover:brightness-110"
             >
-              <LuDownload size={16} /> {isNative ? 'Guardar / Compartir' : 'Descargar'}
+              <LuDownload size={16} /> {isNative ? 'Compartir' : 'Descargar'}
             </button>
             {msg && <p className="text-[12px] text-[#b7b7c2]">{msg}</p>}
           </div>
