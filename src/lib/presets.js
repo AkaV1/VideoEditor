@@ -1,3 +1,4 @@
+import webFonts from './fonts.json';
 // Catálogos de la app: proporciones, mezclas, fuentes, plantillas de texto,
 // stickers, efectos, transiciones y filtros.
 
@@ -27,15 +28,25 @@ export const BLEND_MODES = [
 ];
 export const blendOp = (id) => BLEND_MODES.find((b) => b.id === id)?.op ?? 'source-over';
 
+const WEB_FONTS = webFonts.map((f) => ({
+  id: f.id,
+  label: f.family,
+  group: f.group,
+  css: `"${f.family}", ${f.fallback}`,
+  web: true,
+}));
+
 export const FONTS = [
-  { id: 'sans', label: 'Sans', css: 'Inter, system-ui, "Segoe UI", Roboto, Arial, sans-serif' },
-  { id: 'impact', label: 'Impact', css: 'Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif' },
-  { id: 'serif', label: 'Serif', css: 'Georgia, "Times New Roman", serif' },
-  { id: 'mono', label: 'Mono', css: '"Courier New", ui-monospace, monospace' },
-  { id: 'rounded', label: 'Redondeada', css: '"Trebuchet MS", "Segoe UI", sans-serif' },
-  { id: 'cursive', label: 'Cursiva', css: '"Comic Sans MS", "Brush Script MT", cursive' },
-  { id: 'black', label: 'Black', css: '"Arial Black", Gadget, sans-serif' },
+  { id: 'sans', label: 'Sans', group: 'Sistema', css: 'Inter, system-ui, "Segoe UI", Roboto, Arial, sans-serif' },
+  { id: 'impact', label: 'Impact', group: 'Sistema', css: 'Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif' },
+  { id: 'black', label: 'Black', group: 'Sistema', css: '"Arial Black", Gadget, sans-serif' },
+  { id: 'rounded', label: 'Redondeada', group: 'Sistema', css: '"Trebuchet MS", "Segoe UI", sans-serif' },
+  { id: 'serif', label: 'Serif', group: 'Sistema', css: 'Georgia, "Times New Roman", serif' },
+  { id: 'mono', label: 'Mono', group: 'Sistema', css: '"Courier New", ui-monospace, monospace' },
+  { id: 'cursive', label: 'Cursiva', group: 'Sistema', css: '"Comic Sans MS", "Brush Script MT", cursive' },
+  ...WEB_FONTS,
 ];
+export const FONT_GROUPS = [...new Set(FONTS.map((f) => f.group))];
 export const fontCss = (id) => FONTS.find((f) => f.id === id)?.css ?? FONTS[0].css;
 
 export const DEFAULT_TEXT_STYLE = {
@@ -61,7 +72,7 @@ export const DEFAULT_TEXT_STYLE = {
 
 export const TEXT_TEMPLATES = [
   { id: 'basic', label: 'Básico', text: 'Texto', style: {} },
-  { id: 'title', label: 'Título', text: 'TÍTULO', style: { font: 'black', size: 120, letterSpacing: 4 } },
+  { id: 'title', label: 'Título', text: 'TÍTULO', style: { font: 'anton', size: 120, letterSpacing: 4 } },
   { id: 'sub', label: 'Subtítulo', text: 'Subtítulo', style: { size: 48, bold: false, shadow: true, shadowBlur: 6 } },
   {
     id: 'neon',
@@ -73,7 +84,7 @@ export const TEXT_TEMPLATES = [
     id: 'pop',
     label: 'Pop',
     text: 'POP!',
-    style: { font: 'impact', size: 130, color: '#ffe600', strokeWidth: 10, strokeColor: '#000000' },
+    style: { font: 'bangers', size: 130, color: '#ffe600', strokeWidth: 10, strokeColor: '#000000' },
   },
   {
     id: 'box',
@@ -91,7 +102,7 @@ export const TEXT_TEMPLATES = [
     id: 'retro',
     label: 'Retro',
     text: 'RETRO',
-    style: { font: 'black', size: 110, color: '#ff4fa3', shadow: true, shadowColor: '#00d2c8', shadowBlur: 0, shadowX: 8, shadowY: 8 },
+    style: { font: 'pressstart', size: 64, color: '#ff4fa3', shadow: true, shadowColor: '#00d2c8', shadowBlur: 0, shadowX: 8, shadowY: 8 },
   },
   {
     id: 'typewriter',

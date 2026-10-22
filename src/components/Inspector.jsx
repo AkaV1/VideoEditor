@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   LuAlignLeft, LuAlignCenter, LuAlignRight, LuBold, LuItalic, LuTrash2, LuFlipHorizontal2,
   LuFlipVertical2, LuRotateCcw, LuMousePointer2, LuChevronLeft, LuChevronRight, LuDiamond,
@@ -11,7 +12,7 @@ import {
   evalTransform, evalVolume, anyKeyframes, hasKeyframes, kfIndexAt, localTime, propsFor, EASINGS, EPS,
 } from '../lib/keyframes.js';
 import {
-  BLEND_MODES, FONTS, LUTS, EFFECTS, TRANSITIONS, RATIOS, RESOLUTIONS, FPS_OPTIONS,
+  BLEND_MODES, FONTS, FONT_GROUPS, LUTS, EFFECTS, TRANSITIONS, RATIOS, RESOLUTIONS, FPS_OPTIONS,
   DEFAULT_COLOR, DEFAULT_CROP,
 } from '../lib/presets.js';
 import { Slider, Toggle, Select, ColorField, Segmented, Section, IconBtn } from './ui.jsx';
@@ -100,6 +101,32 @@ function KeyframeBar({ clip }) {
   );
 }
 
+function TransitionSection({ clip, side }) {
+  const key = side === 'out' ? 'transitionOut' : 'transitionIn';
+  const tr = clip[key];
+  return (
+    <Section title={side === 'out' ? 'Transición de salida' : 'Transición de entrada'}>
+      <Select
+        label="Tipo"
+        value={tr?.type ?? 'none'}
+        options={TRANSITIONS.map((x) => ({ value: x.id, label: x.label }))}
+        onChange={(v) => applyTransition(v, clip.id, side)}
+      />
+      {tr && (
+        <Slider
+          label="Duración"
+          value={tr.duration}
+          min={0.1}
+          max={Math.max(0.2, Math.min(3, clip.duration))}
+          step={0.1}
+          unit="s"
+          onChange={(v) => patchClip(clip.id, (c) => ({ ...c, [key]: { ...c[key], duration: v } }), `trdur:${side}`)}
+        />
+      )}
+    </Section>
+  );
+}
+
 // ------------------------------------------------------------------ pestañas
 function TransformControls({ clip }) {
   const [bw, bh] = projectSize();
@@ -127,25 +154,8 @@ function TransformControls({ clip }) {
           onChange={(v) => set({ blend: v })}
         />
       </Section>
-      <Section title="Transición de entrada">
-        <Select
-          label="Tipo"
-          value={clip.transitionIn?.type ?? 'none'}
-          options={TRANSITIONS.map((x) => ({ value: x.id, label: x.label }))}
-          onChange={(v) => applyTransition(v, clip.id)}
-        />
-        {clip.transitionIn && (
-          <Slider
-            label="Duración"
-            value={clip.transitionIn.duration}
-            min={0.1}
-            max={Math.max(0.2, Math.min(3, clip.duration))}
-            step={0.1}
-            unit="s"
-            onChange={(v) => patchClip(clip.id, (c) => ({ ...c, transitionIn: { ...c.transitionIn, duration: v } }), 'trdur')}
-          />
-        )}
-      </Section>
+      <TransitionSection clip={clip} side="in" />
+      <TransitionSection clip={clip} side="out" />
     </>
   );
 }
@@ -271,6 +281,54 @@ function ColorTab({ clip }) {
   );
 }
 
+function FontPicker({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const cur = FONTS.find((f) => f.id === value) ?? FONTS[0];
+  return (
+    <div>
+      <div className="flex items-center gap-2 min-h-[28px]">
+        <span className="w-[84px] shrink-0 text-[12px] text-[#b7b7c2]">Fuente</span>
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="flex h-8 min-w-0 flex-1 items-center justify-between rounded border border-line bg-app px-2 text-[14px] hover:border-white/30"
+          style={{ fontFamily: cur.css }}
+        >
+          <span className="truncate">{cur.label}</span>
+          <span className="ml-1 text-[10px] text-muted">{open ? '▲' : '▼'}</span>
+        </button>
+      </div>
+      {open && (
+        <div className="mt-1.5 max-h-[230px] overflow-y-auto rounded-md border border-line bg-app p-1.5">
+          {FONT_GROUPS.map((g) => (
+            <div key={g}>
+              <div className="px-1 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">{g}</div>
+              <div className="grid grid-cols-2 gap-1">
+                {FONTS.filter((f) => f.group === g).map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => {
+                      onChange(f.id);
+                      setOpen(false);
+                    }}
+                    className={`truncate rounded border px-2 py-1.5 text-left text-[14px] ${
+                      f.id === value ? 'border-accent bg-accent/15 text-accent' : 'border-line text-[#e1e1e8] hover:bg-white/10'
+                    }`}
+                    style={{ fontFamily: f.css }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TextTab({ clip }) {
   const st = clip.style;
   const set = (patch) => patchClip(clip.id, (c) => ({ ...c, style: { ...c.style, ...patch } }), `style:${Object.keys(patch).join(',')}`);
@@ -284,7 +342,7 @@ function TextTab({ clip }) {
           className="w-full resize-none rounded-md border border-line bg-app p-2 text-[13px] outline-none focus:border-accent"
           placeholder="Escribe tu texto"
         />
-        <Select label="Fuente" value={st.font} options={FONTS.map((f) => ({ value: f.id, label: f.label }))} onChange={(v) => set({ font: v })} />
+        <FontPicker value={st.font} onChange={(v) => set({ font: v })} />
         <Slider label="Tamaño" value={st.size} min={10} max={300} onChange={(v) => set({ size: v })} />
         <div className="flex items-center gap-2">
           <Segmented

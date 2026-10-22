@@ -217,6 +217,28 @@ function drawVisual(ctx, clip, src, W, H, scratch) {
   ctx.drawImage(s.canvas, 0, 0, tw, th, -dw / 2, -dh / 2, dw, dh);
 }
 
+/**
+ * Aplica una transición. `p` es el progreso de 0 a 1 de la parte «presente»:
+ * en la entrada sube de 0 a 1; en la salida baja de 1 a 0 (la animación se reproduce al revés,
+ * con los deslizamientos y cortinas saliendo hacia el lado que indica su nombre).
+ */
+function applyTr(st, type, p, out, W, H) {
+  const e = easeOut(p);
+  const d = out ? -1 : 1;
+  switch (type) {
+    case 'fade': st.alpha *= p; break;
+    case 'zoomIn': st.sc *= 0.55 + 0.45 * e; st.alpha *= e; break;
+    case 'zoomOut': st.sc *= 1.5 - 0.5 * e; st.alpha *= e; break;
+    case 'slideLeft': st.dx += d * (1 - e) * W; break;
+    case 'slideRight': st.dx -= d * (1 - e) * W; break;
+    case 'slideUp': st.dy += d * (1 - e) * H; break;
+    case 'wipeRight': st.wipe = out ? [W * (1 - e), 0, W * e, H] : [0, 0, W * e, H]; break;
+    case 'wipeDown': st.wipe = out ? [0, H * (1 - e), W, H * e] : [0, 0, W, H * e]; break;
+    case 'spin': st.rot += d * (1 - e) * Math.PI; st.sc *= e; st.alpha *= e; break;
+    default: break;
+  }
+}
+
 function drawClip(ctx, W, H, k, clip, t, src, scratch, measureCtx) {
   const local = t - clip.start;
   const tf = evalTransform(clip, local);
@@ -227,23 +249,15 @@ function drawClip(ctx, W, H, k, clip, t, src, scratch, measureCtx) {
   let rot = (tf.rotation * Math.PI) / 180;
   let wipe = null;
 
-  const tr = clip.transitionIn;
-  if (tr && tr.duration > 0 && local < tr.duration) {
-    const p = clamp(local / tr.duration, 0, 1);
-    const e = easeOut(p);
-    switch (tr.type) {
-      case 'fade': alpha *= p; break;
-      case 'zoomIn': sc *= 0.55 + 0.45 * e; alpha *= e; break;
-      case 'zoomOut': sc *= 1.5 - 0.5 * e; alpha *= e; break;
-      case 'slideLeft': dx += (1 - e) * W; break;
-      case 'slideRight': dx -= (1 - e) * W; break;
-      case 'slideUp': dy += (1 - e) * H; break;
-      case 'wipeRight': wipe = [0, 0, W * e, H]; break;
-      case 'wipeDown': wipe = [0, 0, W, H * e]; break;
-      case 'spin': rot += (1 - e) * Math.PI; sc *= e; alpha *= e; break;
-      default: break;
-    }
+  const st = { alpha, sc, dx, dy, rot, wipe: null };
+  const tin = clip.transitionIn;
+  if (tin && tin.duration > 0 && local < tin.duration) applyTr(st, tin.type, clamp(local / tin.duration, 0, 1), false, W, H);
+  const tout = clip.transitionOut;
+  const remain = clip.duration - local;
+  if (tout && tout.duration > 0 && remain < tout.duration) {
+    applyTr(st, tout.type, clamp(remain / tout.duration, 0, 1), true, W, H);
   }
+  ({ alpha, sc, dx, dy, rot, wipe } = st);
   if (alpha <= 0.001 || sc === 0) return;
 
   const isText = clip.type === 'text' || clip.type === 'sticker';

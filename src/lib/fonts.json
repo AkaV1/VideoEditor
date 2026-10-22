@@ -1,0 +1,19 @@
+[
+  { "id": "montserrat", "family": "Montserrat", "pkg": "montserrat", "weights": [400, 700], "group": "Sans", "fallback": "sans-serif" },
+  { "id": "poppins", "family": "Poppins", "pkg": "poppins", "weights": [400, 700], "group": "Sans", "fallback": "sans-serif" },
+  { "id": "oswald", "family": "Oswald", "pkg": "oswald", "weights": [400, 700], "group": "Impacto", "fallback": "Impact, sans-serif" },
+  { "id": "bebas", "family": "Bebas Neue", "pkg": "bebas-neue", "weights": [400], "group": "Impacto", "fallback": "Impact, sans-serif" },
+  { "id": "anton", "family": "Anton", "pkg": "anton", "weights": [400], "group": "Impacto", "fallback": "Impact, sans-serif" },
+  { "id": "archivoblack", "family": "Archivo Black", "pkg": "archivo-black", "weights": [400], "group": "Impacto", "fallback": "\"Arial Black\", sans-serif" },
+  { "id": "playfair", "family": "Playfair Display", "pkg": "playfair-display", "weights": [400, 700], "group": "Serif", "fallback": "Georgia, serif" },
+  { "id": "abril", "family": "Abril Fatface", "pkg": "abril-fatface", "weights": [400], "group": "Serif", "fallback": "Georgia, serif" },
+  { "id": "lobster", "family": "Lobster", "pkg": "lobster", "weights": [400], "group": "Manuscrita", "fallback": "cursive" },
+  { "id": "pacifico", "family": "Pacifico", "pkg": "pacifico", "weights": [400], "group": "Manuscrita", "fallback": "cursive" },
+  { "id": "dancing", "family": "Dancing Script", "pkg": "dancing-script", "weights": [400, 700], "group": "Manuscrita", "fallback": "cursive" },
+  { "id": "caveat", "family": "Caveat", "pkg": "caveat", "weights": [400, 700], "group": "Manuscrita", "fallback": "cursive" },
+  { "id": "marker", "family": "Permanent Marker", "pkg": "permanent-marker", "weights": [400], "group": "Divertida", "fallback": "cursive" },
+  { "id": "bangers", "family": "Bangers", "pkg": "bangers", "weights": [400], "group": "Divertida", "fallback": "Impact, sans-serif" },
+  { "id": "righteous", "family": "Righteous", "pkg": "righteous", "weights": [400], "group": "Divertida", "fallback": "sans-serif" },
+  { "id": "orbitron", "family": "Orbitron", "pkg": "orbitron", "weights": [400, 700], "group": "Futurista", "fallback": "monospace" },
+  { "id": "pressstart", "family": "Press Start 2P", "pkg": "press-start-2p", "weights": [400], "group": "Futurista", "fallback": "monospace" }
+]

@@ -74,6 +74,7 @@ export const store = createStore({
   previewZoom: 1,
   // --- UI
   assetTab: 'media',
+  transSide: 'in', // transiciones: 'in' entrada | 'out' salida
   inspectorTab: null,
   panel: null, // diseño compacto: 'assets' | 'inspector' | null
   drag: null, // arrastre de recursos hacia la línea de tiempo
@@ -278,6 +279,7 @@ const baseClip = (type, extra) => ({
   color: { ...DEFAULT_COLOR },
   audio: { ...DEFAULT_AUDIO },
   transitionIn: null, // { type, duration }
+  transitionOut: null,
   keyframes: {},
   ...extra,
 });
@@ -383,7 +385,7 @@ export function addAsset(payload, { time = null, trackId = null } = {}) {
   } else if (payload.kind === 'filter') {
     return applyFilter(payload.id, payload.clipId);
   } else if (payload.kind === 'transition') {
-    return applyTransition(payload.id, payload.clipId);
+    return applyTransition(payload.id, payload.clipId, payload.side);
   }
   if (clip) return insertClip(clip, trackId);
 }
@@ -532,7 +534,7 @@ export function splitClip(id, t) {
     const d2 = clipEnd(c) - t;
     const isMedia = c.type === 'video' || c.type === 'audio';
     const [kl, kr] = splitKeyframes(c, d1);
-    const left = { ...c, duration: d1, keyframes: kl, audio: { ...c.audio, fadeOut: 0 } };
+    const left = { ...c, duration: d1, keyframes: kl, transitionOut: null, audio: { ...c.audio, fadeOut: 0 } };
     const right = {
       ...c,
       keyframes: kr,
@@ -679,14 +681,16 @@ export function applyFilter(lutId, clipId) {
   patchGroup(id, 'color', { lut: lutId });
 }
 
-export function applyTransition(type, clipId) {
+/** side: 'in' (entrada) | 'out' (salida). Sin side usa el modo elegido en el panel. */
+export function applyTransition(type, clipId, side) {
   const s = store.getState();
+  const key = (side ?? s.transSide) === 'out' ? 'transitionOut' : 'transitionIn';
   const id = clipId ?? s.selectedId;
   const f = findClip(s.tracks, id);
   if (!f || f.clip.type === 'audio' || f.clip.type === 'effect') return toast('Selecciona un clip de video, imagen o texto');
   patchClip(id, (c) => ({
     ...c,
-    transitionIn: type === 'none' ? null : { type, duration: c.transitionIn?.duration ?? Math.min(1, c.duration / 2) },
+    [key]: type === 'none' ? null : { type, duration: c[key]?.duration ?? Math.min(1, c.duration / 2) },
   }));
 }
 

@@ -1,5 +1,6 @@
 // Exportación: se reproduce el proyecto en tiempo real sobre un canvas de la resolución elegida
 // y se graba (video del canvas + audio mezclado de Web Audio) con MediaRecorder.
+import { loadFonts } from './fonts.js';
 import { store, getState, projectSize, seek, play, pause, toast } from '../store/store.js';
 import { engine } from './engine.js';
 
@@ -58,6 +59,7 @@ export async function startExport() {
   const mine = session;
   store.setState({ exporting: { phase: 'running', progress: 0, status: 'Preparando…' } });
 
+  await loadFonts(); // el texto debe dibujarse con sus fuentes ya cargadas
   engine.ensureAudio();
   pause();
   engine.stopAllMedia();

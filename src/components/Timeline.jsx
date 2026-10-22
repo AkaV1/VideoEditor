@@ -209,6 +209,11 @@ function ClipBlock({ clip, track, top, height }) {
         <span className="truncate">{label}</span>
         {clip.speed !== 1 && <span className="shrink-0 rounded bg-black/50 px-1">{clip.speed}x</span>}
         {clip.reverse && <span className="shrink-0 rounded bg-black/50 px-1">↺</span>}
+        {clip.transitionOut && (
+          <span className="ml-auto shrink-0 rounded bg-accent/80 px-1 text-white" title={`Salida: ${transitionLabel(clip.transitionOut.type)}`}>
+            ◀
+          </span>
+        )}
         {clip.transitionIn && (
           <span className="shrink-0 rounded bg-accent/80 px-1 text-white" title={transitionLabel(clip.transitionIn.type)}>
             ▶

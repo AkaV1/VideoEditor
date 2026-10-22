@@ -201,7 +201,7 @@ const SLIDES = [
   {
     art: <ArtAdd />,
     title: '4. Texto, stickers y efectos',
-    text: 'Desde el menú inferior añade títulos, stickers, efectos de imagen, transiciones y audio de la biblioteca. Cada uno se coloca en el cabezal y puedes moverlo en la vista previa.',
+    text: 'Desde el menú inferior añade títulos, stickers, efectos de imagen, transiciones (de entrada y de salida), fuentes de letra y audio de la biblioteca. Cada uno se coloca en el cabezal y puedes moverlo en la vista previa.',
   },
   {
     art: <ArtProps />,

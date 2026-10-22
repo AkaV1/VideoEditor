@@ -10,6 +10,7 @@ import {
   TEXT_TEMPLATES, STICKER_CATEGORIES, EFFECTS, TRANSITIONS, LUTS, DEFAULT_TEXT_STYLE, fontCss,
 } from '../lib/presets.js';
 import { importFiles } from '../lib/media.js';
+import { Segmented } from './ui.jsx';
 import { AUDIO_LIBRARY, ensureLibraryAudio, previewLibraryAudio, stopPreview } from '../lib/synth.js';
 import { assetPointerProps } from '../lib/assetDrag.js';
 import { shortTime } from '../lib/time.js';
@@ -248,21 +249,33 @@ function EffectsTab() {
 
 // ------------------------------------------------------------ Transiciones
 function TransitionsTab() {
+  const side = useStore((s) => s.transSide);
   const current = useStore((s) => {
-    for (const t of s.tracks) for (const c of t.clips) if (c.id === s.selectedId) return c.transitionIn?.type ?? 'none';
+    const key = s.transSide === 'out' ? 'transitionOut' : 'transitionIn';
+    for (const t of s.tracks) for (const c of t.clips) if (c.id === s.selectedId) return c[key]?.type ?? 'none';
     return null;
   });
   return (
     <div className="overflow-y-auto h-full">
-      <Title hint="Selecciona un clip y toca una transición, o arrástrala sobre un clip. Se aplica al inicio del clip.">
+      <Title hint="Elige si va al inicio o al final del clip. Selecciona un clip y toca una transición, o arrástrala sobre un clip.">
         Transiciones
       </Title>
+      <div className="px-3 pb-2">
+        <Segmented
+          value={side}
+          options={[
+            { value: 'in', label: 'Entrada (inicio)' },
+            { value: 'out', label: 'Salida (final)' },
+          ]}
+          onChange={(v) => store.setState({ transSide: v })}
+        />
+      </div>
       <div className="grid grid-cols-3 gap-2 px-3 pb-3 sm:grid-cols-5 lg:grid-cols-3 xl:grid-cols-4">
         {TRANSITIONS.map((t) => (
           <Card
             key={t.id}
-            payload={{ kind: 'transition', id: t.id }}
-            onTap={() => addAsset({ kind: 'transition', id: t.id })}
+            payload={{ kind: 'transition', id: t.id, side }}
+            onTap={() => addAsset({ kind: 'transition', id: t.id, side })}
             className={current === t.id ? '!border-accent' : ''}
           >
             <div className="flex aspect-[4/3] items-center justify-center bg-[#15151a]">
