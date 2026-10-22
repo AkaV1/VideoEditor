@@ -401,7 +401,7 @@ export default function Inspector({ padRight = false }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-panel">
-      <div className={`flex shrink-0 items-center border-b border-line ${padRight ? 'pr-9' : ''}`}>
+      <div className="flex shrink-0 items-center border-b border-line" style={padRight ? { paddingRight: 36 } : undefined}>
         <div className="flex min-w-0 flex-1 overflow-x-auto">
           {tabs.map((t) => (
             <button

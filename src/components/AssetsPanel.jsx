@@ -117,7 +117,7 @@ function MediaTab() {
                     {shortTime(m.duration)}
                   </span>
                 )}
-                <span className="absolute right-1 top-1 rounded-full bg-accent p-0.5 text-black opacity-90">
+                <span className="absolute right-1 top-1 rounded-full bg-accent p-0.5 text-white opacity-90">
                   <LuPlus size={12} />
                 </span>
               </div>
@@ -190,7 +190,7 @@ function StickersTab() {
           <button
             key={c.id}
             onClick={() => setCat(c.id)}
-            className={`shrink-0 rounded-full px-3 py-1 text-[12px] ${cat === c.id ? 'bg-accent text-black font-medium' : 'bg-panel2 text-[#c9c9d2] hover:bg-white/10'}`}
+            className={`shrink-0 rounded-full px-3 py-1 text-[12px] ${cat === c.id ? 'bg-accent text-white font-medium' : 'bg-panel2 text-[#c9c9d2] hover:bg-white/10'}`}
           >
             {c.label}
           </button>
@@ -278,7 +278,7 @@ function TransitionsTab() {
 
 function TransitionGlyph({ id }) {
   // pequeña animación en CSS de lo que hace cada transición
-  const base = 'h-7 w-9 rounded-sm bg-gradient-to-br from-accent to-[#3a7bd5]';
+  const base = 'h-7 w-9 rounded-sm bg-gradient-to-br from-accent to-[#6b0f18]';
   const map = {
     none: <div className="h-7 w-9 rounded-sm border border-dashed border-muted" />,
     fade: <div className={`${base} opacity-60`} />,
@@ -327,7 +327,7 @@ function AudioTab() {
           <div key={a.id} className="flex items-center gap-2 rounded-lg border border-line bg-panel2 px-2 py-1.5">
             <button
               onClick={() => preview(a.id)}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-accent hover:text-black"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-accent hover:text-white"
               title="Escuchar"
             >
               {playing === a.id ? <LuPause size={15} /> : <LuPlay size={15} />}
@@ -341,7 +341,7 @@ function AudioTab() {
             <button
               onClick={() => add(a.id)}
               disabled={busy === a.id}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-black disabled:opacity-60"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-white disabled:opacity-60"
               title="Añadir a la línea de tiempo"
             >
               {busy === a.id ? <LuLoader size={15} className="animate-spin" /> : <LuPlus size={16} />}

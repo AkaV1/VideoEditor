@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { LuPlus, LuEllipsisVertical, LuPencil, LuCopy, LuTrash2, LuFilm, LuFolderOpen } from 'react-icons/lu';
+import { LuPlus, LuCircleHelp, LuEllipsisVertical, LuPencil, LuCopy, LuTrash2, LuFilm, LuFolderOpen } from 'react-icons/lu';
 import { toast } from '../store/store.js';
 import {
   newProject, openProject, listAll, renameProject, duplicateProject, removeProject, storageUsage,
 } from '../lib/projects.js';
 import { shortTime } from '../lib/time.js';
 import { Dropdown, MenuItem } from './ui.jsx';
+import Tutorial, { tutorialSeen } from './Tutorial.jsx';
 
 const fmtDate = (t) => {
   const d = new Date(t);
@@ -87,6 +88,7 @@ export default function Home() {
   const [dialog, setDialog] = useState(null); // {type:'rename'|'delete', p}
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [tour, setTour] = useState(() => !tutorialSeen());
 
   const refresh = useCallback(async () => {
     try {
@@ -130,9 +132,17 @@ export default function Home() {
           </span>
           <div className="flex-1" />
           <button
+            onClick={() => setTour(true)}
+            title="Tutorial"
+            aria-label="Tutorial"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[#cfcfd8] hover:bg-white/10"
+          >
+            <LuCircleHelp size={20} />
+          </button>
+          <button
             onClick={create}
             disabled={busy}
-            className="flex h-9 items-center gap-1.5 rounded-lg bg-accent px-3.5 text-[13.5px] font-semibold text-black hover:brightness-110 active:brightness-95 disabled:opacity-60"
+            className="flex h-9 items-center gap-1.5 rounded-lg bg-accent px-3.5 text-[13.5px] font-semibold text-white hover:brightness-110 active:brightness-95 disabled:opacity-60"
           >
             <LuPlus size={17} /> <span>Nuevo proyecto</span>
           </button>
@@ -155,7 +165,7 @@ export default function Home() {
               </p>
               <button
                 onClick={create}
-                className="mt-5 flex h-10 items-center gap-1.5 rounded-lg bg-accent px-5 text-[14px] font-semibold text-black hover:brightness-110"
+                className="mt-5 flex h-10 items-center gap-1.5 rounded-lg bg-accent px-5 text-[14px] font-semibold text-white hover:brightness-110"
               >
                 <LuPlus size={18} /> Crear proyecto
               </button>
@@ -180,6 +190,8 @@ export default function Home() {
         </div>
       </main>
 
+      {tour && <Tutorial onClose={() => setTour(false)} />}
+
       {dialog?.type === 'rename' && (
         <Modal title="Renombrar proyecto" onClose={() => setDialog(null)}>
           <input
@@ -200,7 +212,7 @@ export default function Home() {
                 setDialog(null);
                 refresh();
               }}
-              className="h-9 rounded-md bg-accent px-4 text-[13px] font-semibold text-black"
+              className="h-9 rounded-md bg-accent px-4 text-[13px] font-semibold text-white"
             >
               Guardar
             </button>

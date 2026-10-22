@@ -73,7 +73,7 @@ export default function Header() {
 
         <button
           onClick={openExportDialog}
-          className="flex h-8 items-center gap-1.5 rounded-md bg-accent px-3 text-[13px] font-semibold text-black hover:brightness-110 active:brightness-95"
+          className="flex h-8 items-center gap-1.5 rounded-md bg-accent px-3 text-[13px] font-semibold text-white hover:brightness-110 active:brightness-95"
         >
           <LuDownload size={15} />
           <span>Exportar</span>

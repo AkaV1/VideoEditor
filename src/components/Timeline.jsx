@@ -20,9 +20,9 @@ const RULER_H = 26;
 const ROW_H = { text: 34, video: 56, audio: 42 };
 
 const CLIP_STYLE = {
-  video: { bg: '#27405c', border: '#3d6794' },
+  video: { bg: '#5a2530', border: '#a03d4d' },
   image: { bg: '#2a4d3f', border: '#3f7a62' },
-  audio: { bg: '#1d4f4c', border: '#2d8a84' },
+  audio: { bg: '#5e5018', border: '#a8922e' },
   text: { bg: '#4d3a73', border: '#7459ad' },
   sticker: { bg: '#6a4a2a', border: '#a3743f' },
   effect: { bg: '#733a58', border: '#ad5c88' },
@@ -41,7 +41,7 @@ function Waveform({ peaks, mediaDur, clip, width, height }) {
     ctx.clearRect(0, 0, w, cv.height);
     const rate = clip.speed * (clip.audio?.pitch ? Math.pow(2, clip.audio.pitch / 12) : 1);
     const mid = cv.height / 2;
-    ctx.fillStyle = 'rgba(120,240,225,0.85)';
+    ctx.fillStyle = 'rgba(255,190,150,0.85)';
     for (let x = 0; x < w; x += 2) {
       const local = (x / w) * clip.duration;
       const src = clip.trimStart + (clip.reverse ? clip.duration - local : local) * rate;
@@ -187,9 +187,9 @@ function ClipBlock({ clip, track, top, height }) {
         width,
         height: height - 4,
         background: st.bg,
-        borderColor: selected ? '#00d2c8' : st.border,
+        borderColor: selected ? '#ff4d58' : st.border,
         borderWidth: selected ? 2 : 1,
-        boxShadow: selected ? '0 0 0 1px rgba(0,210,200,0.35)' : undefined,
+        boxShadow: selected ? '0 0 0 1px rgba(255,77,88,0.35)' : undefined,
         touchAction: selected ? 'none' : 'pan-x pan-y',
         zIndex: selected ? 5 : 1,
       }}
@@ -210,7 +210,7 @@ function ClipBlock({ clip, track, top, height }) {
         {clip.speed !== 1 && <span className="shrink-0 rounded bg-black/50 px-1">{clip.speed}x</span>}
         {clip.reverse && <span className="shrink-0 rounded bg-black/50 px-1">↺</span>}
         {clip.transitionIn && (
-          <span className="shrink-0 rounded bg-accent/80 px-1 text-black" title={transitionLabel(clip.transitionIn.type)}>
+          <span className="shrink-0 rounded bg-accent/80 px-1 text-white" title={transitionLabel(clip.transitionIn.type)}>
             ▶
           </span>
         )}

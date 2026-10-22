@@ -187,7 +187,7 @@ function PlayButton() {
         togglePlay();
       }}
       title={playing ? 'Pausa (Espacio)' : 'Reproducir (Espacio)'}
-      className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black hover:bg-accent"
+      className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black hover:bg-accent hover:text-white"
     >
       {playing ? <LuPause size={18} /> : <LuPlay size={18} className="translate-x-px" />}
     </button>

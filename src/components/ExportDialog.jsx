@@ -76,7 +76,7 @@ export default function ExportDialog() {
             </div>
             <button
               onClick={startExport}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-accent text-[14px] font-semibold text-black hover:brightness-110"
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-accent text-[14px] font-semibold text-white hover:brightness-110"
             >
               <LuDownload size={16} /> Iniciar exportación
             </button>
@@ -128,7 +128,7 @@ export default function ExportDialog() {
                   setMsg(`No se pudo guardar: ${e?.message || e}`);
                 }
               }}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-accent text-[14px] font-semibold text-black hover:brightness-110"
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-accent text-[14px] font-semibold text-white hover:brightness-110"
             >
               <LuDownload size={16} /> {isNative ? 'Compartir' : 'Descargar'}
             </button>
