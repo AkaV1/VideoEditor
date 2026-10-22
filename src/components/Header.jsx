@@ -1,4 +1,5 @@
-import { LuUndo2, LuRedo2, LuDownload, LuChevronDown } from 'react-icons/lu';
+import { LuUndo2, LuRedo2, LuDownload, LuChevronDown, LuChevronLeft } from 'react-icons/lu';
+import { goHome } from '../lib/projects.js';
 import { useStore, undo, redo, setProject } from '../store/store.js';
 import { RESOLUTIONS, FPS_OPTIONS } from '../lib/presets.js';
 import { openExportDialog } from '../lib/exporter.js';
@@ -10,10 +11,12 @@ export default function Header() {
   const fps = useStore((s) => s.project.fps);
   const canUndo = useStore((s) => s.past.length > 0);
   const canRedo = useStore((s) => s.future.length > 0);
+  const saveState = useStore((s) => s.saveState);
 
   return (
     <header className="safe-top safe-x shrink-0 border-b border-line bg-[#16161a]">
       <div className="flex h-12 items-center gap-2 px-2 sm:px-3">
+        <IconBtn icon={LuChevronLeft} title="Mis proyectos" onClick={goHome} className="h-8 w-8" />
         <div className="flex items-center gap-2">
           <img src="logo.png" alt="LineCut" className="h-8 w-8 rounded-lg" draggable={false} />
           <span className="hidden text-[15px] font-bold tracking-tight sm:inline">
@@ -37,6 +40,13 @@ export default function Header() {
         </div>
 
         <div className="flex-1 max-sm:hidden" />
+
+        <span
+          className={`hidden text-[11px] md:inline ${saveState === 'error' ? 'text-red-400' : 'text-muted'}`}
+          title="Los cambios se guardan automáticamente"
+        >
+          {saveState === 'error' ? 'Error al guardar' : saveState === 'pending' ? 'Guardando…' : 'Guardado'}
+        </span>
 
         <Dropdown
           align="right"

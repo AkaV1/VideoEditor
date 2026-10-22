@@ -43,11 +43,19 @@ const newTrack = (kind, name) => ({
 
 const portrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
 
-export const store = createStore({
-  // --- documento (entra en el historial)
+export const freshDocument = () => ({
   project: { name: 'Proyecto sin título', ratio: portrait ? '9:16' : '16:9', res: 1080, fps: 30 },
   tracks: [newTrack('text', 'Texto'), newTrack('video', 'Video'), newTrack('audio', 'Audio')],
   markers: [],
+});
+
+export const store = createStore({
+  // --- pantalla y proyecto abierto
+  view: 'home', // 'home' | 'editor'
+  projectId: null,
+  saveState: 'saved', // 'saved' | 'pending' | 'error'
+  // --- documento (entra en el historial)
+  ...freshDocument(),
   // --- biblioteca
   media: {},
   // --- transporte
@@ -173,6 +181,30 @@ function mutate(fn, key = null) {
     currentTime: Math.min(s.currentTime, duration),
   });
   return true;
+}
+
+/** Sustituye todo el documento (abrir / crear / cerrar proyecto). */
+export function loadDocument({ projectId, project, tracks, markers, media, view }) {
+  lastKey = null;
+  store.setState({
+    view,
+    projectId,
+    saveState: 'saved',
+    project,
+    tracks,
+    markers,
+    media,
+    past: [],
+    future: [],
+    duration: calcDuration(tracks),
+    currentTime: 0,
+    isPlaying: false,
+    selectedId: null,
+    panel: null,
+    drag: null,
+    exporting: null,
+    previewZoom: 1,
+  });
 }
 
 export function undo() {

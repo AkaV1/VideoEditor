@@ -11,6 +11,7 @@ import Preview from './components/Preview.jsx';
 import Timeline from './components/Timeline.jsx';
 import Inspector from './components/Inspector.jsx';
 import ExportDialog from './components/ExportDialog.jsx';
+import Home from './components/Home.jsx';
 import { AssetsPanel, AssetTabsVertical, ASSET_TABS } from './components/AssetsPanel.jsx';
 
 // ------------------------------------------------------------ diseño responsive
@@ -225,9 +226,14 @@ function CompactLandscape() {
   );
 }
 
-export default function App() {
+function Editor() {
   const { desktop, landscape } = useLayout();
   useShortcuts();
+  return desktop ? <Desktop /> : landscape ? <CompactLandscape /> : <CompactPortrait />;
+}
+
+export default function App() {
+  const view = useStore((s) => s.view);
 
   useEffect(() => {
     // al salir de la app, detiene la reproducción
@@ -238,7 +244,7 @@ export default function App() {
 
   return (
     <div className="h-full w-full bg-app text-[#e8e8ee]">
-      {desktop ? <Desktop /> : landscape ? <CompactLandscape /> : <CompactPortrait />}
+      {view === 'editor' ? <Editor /> : <Home />}
       <DragGhost />
       <Toast />
       <ExportDialog />

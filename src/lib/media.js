@@ -1,6 +1,7 @@
 // Importación de archivos locales: duración, dimensiones, miniaturas y forma de onda.
 import { uid } from './time.js';
-import { addMedia, updateMedia, toast } from '../store/store.js';
+import { addMedia, updateMedia, toast, getState } from '../store/store.js';
+import { putBlob } from './db.js';
 
 const EXT = {
   video: /\.(mp4|m4v|mov|webm|mkv|3gp|avi|ogv)$/i,
@@ -114,6 +115,23 @@ async function makeThumbs(url, duration, aspect) {
   return out.filter(Boolean);
 }
 
+async function makeImagePoster(url) {
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const h = 96;
+    const w = Math.max(24, Math.round((h * img.naturalWidth) / (img.naturalHeight || 1)));
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    return c.toDataURL('image/jpeg', 0.6);
+  } catch {
+    return null;
+  }
+}
+
 async function makePeaks(file, duration) {
   const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   if (!Ctx) return null;
@@ -166,6 +184,15 @@ export async function importFile(file) {
     peaks: null,
   };
   addMedia(item);
+
+  // Copia del archivo en el almacenamiento de la app para poder reabrir el proyecto
+  const pid = getState().projectId;
+  if (pid) {
+    putBlob(pid, id, file).catch(() => toast('No hay espacio para guardar este medio en el proyecto'));
+  }
+  if (kind === 'image') {
+    makeImagePoster(url).then((poster) => poster && updateMedia(id, { poster }));
+  }
 
   // Trabajo secundario: no bloquea la edición
   if (kind === 'video') {

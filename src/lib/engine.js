@@ -41,6 +41,12 @@ class Engine {
   markDirty() {
     this.dirty = true;
   }
+  /** Libera todos los elementos de medio (al cerrar o cambiar de proyecto). */
+  reset() {
+    for (const id of Array.from(this.els.keys())) this.release(id);
+    this.images.clear();
+    this.dirty = true;
+  }
 
   // -------------------------------------------------------------------- audio
   ensureAudio() {
