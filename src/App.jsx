@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { LuX, LuSlidersHorizontal } from 'react-icons/lu';
 import {
   store, getState, useStore, undo, redo, togglePlay, seek, stepFrames, setTool, splitAtPlayhead,
-  deleteSelected, addMarker, selectClip, pause,
+  deleteSelected, addMarker, selectClip, pause, toggleAllKeyframes,
 } from './store/store.js';
 import { engine } from './lib/engine.js';
 import { stopPreview } from './lib/synth.js';
@@ -51,6 +51,10 @@ function useShortcuts() {
       else if (k === 'b') setTool('cut');
       else if (k === 's' && !mod) splitAtPlayhead();
       else if (k === 'm') addMarker(getState().currentTime);
+      else if (k === 'k' && !mod) {
+        const id = getState().selectedId;
+        if (id) toggleAllKeyframes(id);
+      }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         deleteSelected();

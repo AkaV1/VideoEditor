@@ -1,11 +1,15 @@
 import {
   LuAlignLeft, LuAlignCenter, LuAlignRight, LuBold, LuItalic, LuTrash2, LuFlipHorizontal2,
-  LuFlipVertical2, LuRotateCcw, LuMousePointer2,
+  LuFlipVertical2, LuRotateCcw, LuMousePointer2, LuChevronLeft, LuChevronRight, LuDiamond,
 } from 'react-icons/lu';
 import {
   store, useStore, findClip, patchGroup, patchClip, setClipSpeed, setClipReverse, deleteClip, setProject,
-  projectSize, applyTransition,
+  projectSize, applyTransition, toggleKeyframe, toggleAllKeyframes, setKeyframeEase, clearKeyframes,
+  seekKeyframe,
 } from '../store/store.js';
+import {
+  evalTransform, evalVolume, anyKeyframes, hasKeyframes, kfIndexAt, localTime, propsFor, EASINGS, EPS,
+} from '../lib/keyframes.js';
 import {
   BLEND_MODES, FONTS, LUTS, EFFECTS, TRANSITIONS, RATIOS, RESOLUTIONS, FPS_OPTIONS,
   DEFAULT_COLOR, DEFAULT_CROP,
@@ -35,19 +39,82 @@ function tabsFor(type) {
   }
 }
 
+// ---------------------------------------------------------------- keyframes
+/** Instante local del cabezal; solo se suscribe al tiempo si el clip tiene keyframes. */
+function useLocal(clip) {
+  const has = anyKeyframes(clip);
+  const now = useStore((s) => (has ? s.currentTime : 0));
+  return has ? localTime(clip, now) : 0;
+}
+
+const kfState = (clip, prop, local) =>
+  !hasKeyframes(clip, prop) ? 'off' : kfIndexAt(clip.keyframes[prop], local) >= 0 ? 'on' : 'near';
+
+function KeyframeBar({ clip }) {
+  const local = useLocal(clip);
+  const props = propsFor(clip);
+  if (!props.length) return null;
+  const count = props.reduce((n, p) => n + (clip.keyframes?.[p]?.length ?? 0), 0);
+  const onHere = props.filter((p) => kfIndexAt(clip.keyframes?.[p], local) >= 0);
+  const all = onHere.length === props.length;
+  const curEase = onHere.length ? clip.keyframes[onHere[0]].find((k) => Math.abs(k.t - local) < EPS)?.e : null;
+  return (
+    <div className="border-b border-line/70 px-3 py-2">
+      <div className="flex items-center gap-1.5">
+        <IconBtn icon={LuChevronLeft} title="Keyframe anterior" onClick={() => seekKeyframe(clip.id, -1)} disabled={!count} className="h-8 w-8" />
+        <button
+          onClick={() => toggleAllKeyframes(clip.id)}
+          className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md border text-[12.5px] font-medium ${
+            all ? 'border-[#ffc933] bg-[#ffc933]/15 text-[#ffc933]' : 'border-line text-[#e1e1e8] hover:bg-white/10'
+          }`}
+        >
+          <LuDiamond size={13} className={all ? 'fill-current' : ''} />
+          {all ? 'Quitar keyframe' : 'Añadir keyframe'}
+        </button>
+        <IconBtn icon={LuChevronRight} title="Keyframe siguiente" onClick={() => seekKeyframe(clip.id, 1)} disabled={!count} className="h-8 w-8" />
+      </div>
+      {count > 0 && (
+        <div className="mt-2 flex items-center gap-2">
+          <span className="shrink-0 text-[11px] text-muted">{count} keyframe{count === 1 ? '' : 's'}</span>
+          <div className="flex-1" />
+          {onHere.length > 0 && (
+            <Segmented
+              value={curEase}
+              options={EASINGS.map((e) => ({ value: e.id, label: e.label }))}
+              onChange={(v) => setKeyframeEase(clip.id, v)}
+              className="!h-7"
+            />
+          )}
+          <button className="shrink-0 text-[11px] text-[#e8756f]" onClick={() => clearKeyframes(clip.id)}>
+            Borrar todos
+          </button>
+        </div>
+      )}
+      {count === 0 && (
+        <p className="mt-1.5 text-[11px] leading-snug text-muted">
+          Mueve el cabezal, pulsa «Añadir keyframe» y cambia posición, escala, rotación u opacidad en otro instante: la
+          propiedad se animará entre ambos. También puedes usar el rombo junto a cada control.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------ pestañas
 function TransformControls({ clip }) {
   const [bw, bh] = projectSize();
-  const t = clip.transform;
+  const local = useLocal(clip);
+  const t = evalTransform(clip, local);
   const set = (patch) => patchGroup(clip.id, 'transform', patch);
+  const kf = (p) => ({ state: kfState(clip, p, local), onToggle: () => toggleKeyframe(clip.id, p) });
   return (
     <>
       <Section title="Transformar">
-        <Slider label="Escala" value={t.scale} min={5} max={400} unit="%" onChange={(v) => set({ scale: v })} hardMax={800} />
-        <Slider label="Posición X" value={t.x} min={-bw} max={bw} onChange={(v) => set({ x: v })} />
-        <Slider label="Posición Y" value={t.y} min={-bh} max={bh} onChange={(v) => set({ y: v })} />
-        <Slider label="Rotación" value={t.rotation} min={-180} max={180} unit="°" onChange={(v) => set({ rotation: v })} />
-        <Slider label="Opacidad" value={t.opacity} min={0} max={100} unit="%" onChange={(v) => set({ opacity: v })} />
+        <Slider label="Escala" value={t.scale} min={5} max={400} unit="%" onChange={(v) => set({ scale: v })} hardMax={800} kf={kf('scale')} />
+        <Slider label="Posición X" value={t.x} min={-bw} max={bw} onChange={(v) => set({ x: v })} kf={kf('x')} />
+        <Slider label="Posición Y" value={t.y} min={-bh} max={bh} onChange={(v) => set({ y: v })} kf={kf('y')} />
+        <Slider label="Rotación" value={t.rotation} min={-180} max={180} unit="°" onChange={(v) => set({ rotation: v })} kf={kf('rotation')} />
+        <Slider label="Opacidad" value={t.opacity} min={0} max={100} unit="%" onChange={(v) => set({ opacity: v })} kf={kf('opacity')} />
         <div className="flex items-center gap-2">
           <span className="w-[84px] shrink-0 text-[12px] text-[#b7b7c2]">Espejo</span>
           <IconBtn icon={LuFlipHorizontal2} title="Espejo horizontal" active={t.flipH} onClick={() => set({ flipH: !t.flipH })} className="h-7 flex-1 border border-line" />
@@ -105,12 +172,21 @@ function CropTab({ clip }) {
 
 function AudioTab({ clip }) {
   const a = clip.audio;
+  const local = useLocal(clip);
   const set = (patch) => patchGroup(clip.id, 'audio', patch);
   const fadeMax = Math.max(0.5, Math.min(10, clip.duration));
   return (
     <>
       <Section title="Volumen">
-        <Slider label="Volumen" value={a.volume} min={0} max={200} unit="%" onChange={(v) => set({ volume: v })} />
+        <Slider
+          label="Volumen"
+          value={evalVolume(clip, local)}
+          min={0}
+          max={200}
+          unit="%"
+          onChange={(v) => set({ volume: v })}
+          kf={{ state: kfState(clip, 'volume', local), onToggle: () => toggleKeyframe(clip.id, 'volume') }}
+        />
         <Slider label="Fade in" value={a.fadeIn} min={0} max={fadeMax} step={0.1} unit="s" onChange={(v) => set({ fadeIn: v })} />
         <Slider label="Fade out" value={a.fadeOut} min={0} max={fadeMax} step={0.1} unit="s" onChange={(v) => set({ fadeOut: v })} />
       </Section>
@@ -340,6 +416,7 @@ export default function Inspector({ padRight = false }) {
         <IconBtn icon={LuTrash2} title="Eliminar clip" onClick={() => deleteClip(clip.id)} className="mx-1 h-8 w-8 shrink-0 text-[#e8756f]" />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto" key={`${clip.id}:${tab}`}>
+        {(tab === 'video' || tab === 'basic' || tab === 'audio') && <KeyframeBar clip={clip} />}
         {tab === 'video' && <TransformControls clip={clip} />}
         {tab === 'basic' && <TransformControls clip={clip} />}
         {tab === 'crop' && <CropTab clip={clip} />}

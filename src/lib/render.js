@@ -2,6 +2,7 @@
 // Es una función pura respecto al estado: la usan la vista previa y la exportación.
 import { blendOp, fontCss, lutCss } from './presets.js';
 import { clamp } from './time.js';
+import { evalTransform } from './keyframes.js';
 
 const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
@@ -142,17 +143,17 @@ export function naturalSize(clip, src, W, H, k, measureCtx) {
 }
 
 /** Caja del clip en el lienzo: centro, tamaño y rotación (ya con escala y posición). */
-export function clipBox(clip, src, W, H, k, measureCtx) {
+export function clipBox(clip, src, W, H, k, measureCtx, t = null) {
   const n = naturalSize(clip, src, W, H, k, measureCtx);
   if (!n) return null;
-  const t = clip.transform;
-  const s = t.scale / 100;
+  const tf = t === null ? clip.transform : evalTransform(clip, t - clip.start);
+  const s = tf.scale / 100;
   return {
-    cx: W / 2 + t.x * k,
-    cy: H / 2 + t.y * k,
+    cx: W / 2 + tf.x * k,
+    cy: H / 2 + tf.y * k,
     w: n.w * s,
     h: n.h * s,
-    rot: t.rotation,
+    rot: tf.rotation,
   };
 }
 
@@ -218,7 +219,7 @@ function drawVisual(ctx, clip, src, W, H, scratch) {
 
 function drawClip(ctx, W, H, k, clip, t, src, scratch, measureCtx) {
   const local = t - clip.start;
-  const tf = clip.transform;
+  const tf = evalTransform(clip, local);
   let alpha = tf.opacity / 100;
   let sc = tf.scale / 100;
   let dx = tf.x * k;

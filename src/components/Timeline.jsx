@@ -9,6 +9,7 @@ import {
   splitClip, deleteSelected, detachAudio, addMarker, setZoom, toggleTrack, moveClip, trimLeft,
   trimRight, clipEnd,
 } from '../store/store.js';
+import { allTimes } from '../lib/keyframes.js';
 import { snapTime, timeAtClientX, rowAtClientY } from '../lib/snap.js';
 import { rulerLabel, clamp } from '../lib/time.js';
 import { effectLabel, transitionLabel } from '../lib/presets.js';
@@ -194,6 +195,13 @@ function ClipBlock({ clip, track, top, height }) {
       }}
     >
       {tiles}
+      {allTimes(clip).map((kt) => (
+        <span
+          key={kt}
+          className="pointer-events-none absolute bottom-1 z-[2] h-2.5 w-2.5 -translate-x-1/2 rotate-45 border border-black/70 bg-[#ffc933]"
+          style={{ left: Math.min(width - 6, Math.max(6, kt * zoom)) }}
+        />
+      ))}
       {media?.peaks && clip.type === 'audio' && (
         <Waveform peaks={media.peaks} mediaDur={media.duration} clip={clip} width={width} height={height - 4} />
       )}

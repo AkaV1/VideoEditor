@@ -10,6 +10,7 @@ import {
 import { engine } from '../lib/engine.js';
 import { RATIOS } from '../lib/presets.js';
 import { timecode, clamp } from '../lib/time.js';
+import { evalTransform } from '../lib/keyframes.js';
 import { IconBtn, Dropdown, MenuItem } from './ui.jsx';
 
 const RATIO_ICON = { '16:9': LuRectangleHorizontal, '9:16': LuRectangleVertical, '1:1': LuSquare, '4:3': LuMonitor };
@@ -35,7 +36,7 @@ function SelectionBox({ cs, wrapRef }) {
     e.preventDefault();
     const sx = e.clientX;
     const sy = e.clientY;
-    const o = { ...clip.transform };
+    const o = { ...evalTransform(clip, getState().currentTime - clip.start) };
     const c = clientCenter();
     const d0 = Math.max(8, Math.hypot(sx - c.x, sy - c.y));
     const a0 = Math.atan2(sy - c.y, sx - c.x);

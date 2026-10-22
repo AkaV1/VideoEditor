@@ -2,6 +2,7 @@
 // + dibujo del fotograma en el canvas de la vista previa (y en el canvas de exportación).
 import { store, getState, projectSize, pause } from '../store/store.js';
 import { Scratch, drawFrame, clipBox, naturalSize } from './render.js';
+import { evalVolume } from './keyframes.js';
 import { clamp } from './time.js';
 
 const pitchFactor = (c) => (c.type === 'audio' && c.audio.pitch ? Math.pow(2, c.audio.pitch / 12) : 1);
@@ -217,7 +218,7 @@ class Engine {
         // Cadena de audio por clip
         if (e.gain) {
           const a = c.audio;
-          let g = a.volume / 100;
+          let g = evalVolume(c, local) / 100;
           if (a.fadeIn > 0 && local < a.fadeIn) g *= clamp(local / a.fadeIn, 0, 1);
           if (a.fadeOut > 0 && local > c.duration - a.fadeOut) g *= clamp((c.duration - local) / a.fadeOut, 0, 1);
           if (track.muted || !active || !playing) g = 0;
@@ -242,7 +243,7 @@ class Engine {
     const s = getState();
     const [bw, bh] = projectSize(s.project);
     const src = clip.type === 'video' || clip.type === 'image' ? this.getSource(clip) : null;
-    return clipBox(clip, src, bw, bh, 1, this.measure);
+    return clipBox(clip, src, bw, bh, 1, this.measure, s.currentTime);
   }
 
   /** Clip visible más alto bajo el punto (x, y) en coordenadas del lienzo base. */

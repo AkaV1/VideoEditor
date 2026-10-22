@@ -11,6 +11,10 @@ import {
   TEXT_TEMPLATES,
 } from '../lib/presets.js';
 import { clamp, uid } from '../lib/time.js';
+import {
+  KF_PROPS, EPS, valueAt, setKf, kfIndexAt, hasKeyframes, localTime, splitKeyframes, shiftKeyframes,
+  scaleKeyframes, propsFor, allTimes,
+} from '../lib/keyframes.js';
 
 // ------------------------------------------------------------------ store
 function createStore(initial) {
@@ -274,6 +278,7 @@ const baseClip = (type, extra) => ({
   color: { ...DEFAULT_COLOR },
   audio: { ...DEFAULT_AUDIO },
   transitionIn: null, // { type, duration }
+  keyframes: {},
   ...extra,
 });
 
@@ -394,9 +399,116 @@ export function patchClip(id, fn, key = null) {
   }, key ? `${key}:${id}` : null);
 }
 
-/** Cambia un grupo de propiedades de un sub-objeto: patchGroup(id,'transform',{x:10}) */
+/**
+ * Cambia un grupo de propiedades: patchGroup(id,'transform',{x:10}).
+ * Si la propiedad tiene keyframes, el cambio se guarda como keyframe en el cabezal.
+ */
 export function patchGroup(id, group, patch) {
-  patchClip(id, (c) => ({ ...c, [group]: { ...c[group], ...patch } }), `${group}:${Object.keys(patch).join(',')}`);
+  const key = `${group}:${Object.keys(patch).join(',')}`;
+  const s = store.getState();
+  patchClip(
+    id,
+    (c) => {
+      const local = localTime(c, s.currentTime);
+      const base = {};
+      let kfs = c.keyframes;
+      for (const [k, v] of Object.entries(patch)) {
+        if (KF_PROPS[k] === group && hasKeyframes(c, k)) kfs = { ...kfs, [k]: setKf(kfs[k], local, v) };
+        else base[k] = v;
+      }
+      return { ...c, [group]: { ...c[group], ...base }, ...(kfs !== c.keyframes ? { keyframes: kfs } : {}) };
+    },
+    key,
+  );
+}
+
+// ---------------------------------------------------------------- keyframes
+/** Activa/quita el keyframe de una propiedad en el cabezal. */
+export function toggleKeyframe(id, prop) {
+  const s = store.getState();
+  patchClip(id, (c) => {
+    const local = localTime(c, s.currentTime);
+    const list = c.keyframes?.[prop];
+    const i = kfIndexAt(list, local);
+    const group = KF_PROPS[prop];
+    if (i >= 0) {
+      const rest = list.filter((_, j) => j !== i);
+      const kfs = { ...c.keyframes };
+      if (rest.length) kfs[prop] = rest;
+      else delete kfs[prop];
+      // si era el último, la propiedad conserva el valor que tenía en este instante
+      return { ...c, keyframes: kfs, ...(rest.length ? {} : { [group]: { ...c[group], [prop]: valueAt(c, prop, local) } }) };
+    }
+    return { ...c, keyframes: { ...c.keyframes, [prop]: setKf(list, local, valueAt(c, prop, local)) } };
+  });
+}
+
+/** Añade (o quita, si ya están todos) un keyframe de todas las propiedades del clip en el cabezal. */
+export function toggleAllKeyframes(id) {
+  const s = store.getState();
+  const f = findClip(s.tracks, id);
+  if (!f) return toast('Selecciona un clip primero');
+  const props = propsFor(f.clip);
+  if (!props.length) return toast('Este clip no admite keyframes');
+  const local = localTime(f.clip, s.currentTime);
+  const allOn = props.every((p) => kfIndexAt(f.clip.keyframes?.[p], local) >= 0);
+  patchClip(id, (c) => {
+    const kfs = { ...c.keyframes };
+    const base = { ...c };
+    for (const p of props) {
+      const list = kfs[p];
+      if (allOn) {
+        const rest = (list || []).filter((k) => Math.abs(k.t - local) >= EPS);
+        if (rest.length) kfs[p] = rest;
+        else {
+          delete kfs[p];
+          const g = KF_PROPS[p];
+          base[g] = { ...base[g], [p]: valueAt(c, p, local) };
+        }
+      } else kfs[p] = setKf(list, local, valueAt(c, p, local));
+    }
+    return { ...base, keyframes: kfs };
+  });
+}
+
+/** Cambia la suavidad del tramo que sale de los keyframes situados en el cabezal. */
+export function setKeyframeEase(id, ease) {
+  const s = store.getState();
+  patchClip(id, (c) => {
+    const local = localTime(c, s.currentTime);
+    const kfs = {};
+    for (const [p, list] of Object.entries(c.keyframes || {})) {
+      kfs[p] = list.map((k) => (Math.abs(k.t - local) < EPS ? { ...k, e: ease } : k));
+    }
+    return { ...c, keyframes: kfs };
+  });
+}
+
+export function clearKeyframes(id, prop = null) {
+  patchClip(id, (c) => {
+    const props = prop ? [prop] : Object.keys(c.keyframes || {});
+    const kfs = { ...c.keyframes };
+    const out = { ...c };
+    const local = localTime(c, store.getState().currentTime);
+    for (const p of props) {
+      if (!kfs[p]) continue;
+      const g = KF_PROPS[p];
+      out[g] = { ...out[g], [p]: valueAt(c, p, local) };
+      delete kfs[p];
+    }
+    return { ...out, keyframes: kfs };
+  });
+}
+
+/** Mueve el cabezal al keyframe anterior/siguiente del clip. dir = -1 | 1 */
+export function seekKeyframe(id, dir) {
+  const s = store.getState();
+  const f = findClip(s.tracks, id);
+  if (!f) return;
+  const times = allTimes(f.clip).map((t) => f.clip.start + t);
+  const now = s.currentTime;
+  const target = dir > 0 ? times.find((t) => t > now + EPS) : [...times].reverse().find((t) => t < now - EPS);
+  if (target !== undefined) seek(target);
 }
 
 export function deleteClip(id) {
@@ -419,9 +531,11 @@ export function splitClip(id, t) {
     const d1 = t - c.start;
     const d2 = clipEnd(c) - t;
     const isMedia = c.type === 'video' || c.type === 'audio';
-    const left = { ...c, duration: d1, audio: { ...c.audio, fadeOut: 0 } };
+    const [kl, kr] = splitKeyframes(c, d1);
+    const left = { ...c, duration: d1, keyframes: kl, audio: { ...c.audio, fadeOut: 0 } };
     const right = {
       ...c,
+      keyframes: kr,
       id: uid('clip'),
       start: t,
       duration: d2,
@@ -505,7 +619,16 @@ export function trimLeft(id, time, mediaDuration = Infinity) {
     const ns = clamp(time, minStart, clipEnd(c) - 0.1);
     const delta = ns - c.start;
     const trimStart = isMedia && !c.reverse ? c.trimStart + delta * c.speed : c.trimStart;
-    return { tracks: mapClip(d.tracks, id, (x) => ({ ...x, start: ns, duration: clipEnd(c) - ns, trimStart })) };
+    const nd = clipEnd(c) - ns;
+    return {
+      tracks: mapClip(d.tracks, id, (x) => ({
+        ...x,
+        start: ns,
+        duration: nd,
+        trimStart,
+        keyframes: shiftKeyframes(x.keyframes, -delta, nd),
+      })),
+    };
   }, `trimL:${id}`);
 }
 
@@ -533,7 +656,14 @@ export function setClipSpeed(id, speed) {
     let dur = Math.max(0.1, (c.duration * c.speed) / speed);
     const next = Math.min(Infinity, ...f.track.clips.filter((x) => x.id !== id && x.start >= clipEnd(c) - 1e-6).map((x) => x.start));
     dur = Math.min(dur, next - c.start);
-    return { tracks: mapClip(d.tracks, id, (x) => ({ ...x, speed, duration: dur })) };
+    return {
+      tracks: mapClip(d.tracks, id, (x) => ({
+        ...x,
+        speed,
+        duration: dur,
+        keyframes: scaleKeyframes(x.keyframes, dur / c.duration),
+      })),
+    };
   }, `speed:${id}`);
 }
 

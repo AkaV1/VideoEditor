@@ -39,13 +39,42 @@ const fmt = (v, step) => {
   return Number(v).toFixed(d);
 };
 
-export function Slider({ label, value, min, max, step = 1, unit = '', onChange, hardMax = null }) {
+/** Rombo de keyframe: 'off' sin animar · 'near' animada, sin keyframe aquí · 'on' keyframe en el cabezal. */
+export function KfDiamond({ state = 'off', onClick, size = 14, title }) {
+  const on = state === 'on';
+  const near = state === 'near';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title ?? (on ? 'Quitar keyframe' : 'Añadir keyframe')}
+      aria-label={title ?? (on ? 'Quitar keyframe' : 'Añadir keyframe')}
+      aria-pressed={on}
+      className="flex h-6 w-5 shrink-0 items-center justify-center"
+    >
+      <svg width={size} height={size} viewBox="0 0 14 14">
+        <path
+          d="M7 1.2 12.8 7 7 12.8 1.2 7z"
+          fill={on ? '#ffc933' : 'none'}
+          stroke={on || near ? '#ffc933' : '#7a7a86'}
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
+  );
+}
+
+export function Slider({ label, value, min, max, step = 1, unit = '', onChange, hardMax = null, kf = null }) {
   const v = Number.isFinite(value) ? value : 0;
   const fill = ((clamp(v, min, max) - min) / (max - min)) * 100;
   const [draft, setDraft] = useState(null);
   return (
     <div className="flex items-center gap-2 min-h-[26px]">
-      <span className="w-[84px] shrink-0 text-[12px] text-[#b7b7c2] leading-tight">{label}</span>
+      <span className="flex w-[84px] shrink-0 items-center justify-between text-[12px] text-[#b7b7c2] leading-tight">
+        <span className="min-w-0">{label}</span>
+        {kf && <KfDiamond state={kf.state} onClick={kf.onToggle} />}
+      </span>
       <input
         type="range"
         className="flex-1 min-w-0"
