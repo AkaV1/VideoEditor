@@ -1,0 +1,9 @@
+{
+  "appId": "com.linecut.app",
+  "appName": "LineCut",
+  "webDir": "dist",
+  "backgroundColor": "#121214",
+  "android": {
+    "allowMixedContent": false
+  }
+}
