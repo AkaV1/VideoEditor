@@ -92,7 +92,7 @@ export async function startExport(override = null, attempt = 0) {
   const W = even(bw * k);
   const H = even(bh * k);
   const duration = s.duration;
-  const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
+  let ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
 
   session = { cancelled: false };
   const mine = session;
@@ -178,6 +178,18 @@ export async function startExport(override = null, attempt = 0) {
 
     let blob = new Blob(chunks, { type: mime.split(';')[0] });
     if (ext === 'mp4') blob = await fixMp4Duration(blob); // escribe la duración real en la cabecera
+    let convertError = null;
+    if (ext === 'webm' && window.linecutDesktop?.convertToMp4) {
+      // Escritorio (Linux): Chromium solo graba WebM; ffmpeg lo convierte a MP4 H.264 con duración correcta.
+      store.setState({ exporting: { phase: 'running', progress: 1, status: 'Convirtiendo a MP4…' } });
+      try {
+        const out = await window.linecutDesktop.convertToMp4(new Uint8Array(await blob.arrayBuffer()), { fps });
+        blob = new Blob([out], { type: 'video/mp4' });
+        ext = 'mp4';
+      } catch (e) {
+        convertError = e?.message || String(e);
+      }
+    }
     const url = URL.createObjectURL(blob);
     const safe = (s.project.name || 'LineCut').replace(/[^\w\- áéíóúñÁÉÍÓÚÑ]/g, '').trim() || 'LineCut';
     const seconds = await probeDuration(url);
@@ -194,7 +206,7 @@ export async function startExport(override = null, attempt = 0) {
         progress: 1,
         result: {
           blob, url, name: `${safe}.${ext}`, size: blob.size, W, H, fps,
-          seconds, expected: duration, short: seconds !== null && seconds < duration * 0.85,
+          convertError, seconds, expected: duration, short: seconds !== null && seconds < duration * 0.85,
         },
       },
     });

@@ -9,6 +9,8 @@ export const isNative = (() => {
   }
 })();
 
+export const isDesktop = typeof window !== 'undefined' && !!window.linecutDesktop;
+
 const Filesystem = registerPlugin('Filesystem');
 const Share = registerPlugin('Share');
 const Gallery = registerPlugin('Gallery'); // plugin propio (se añade al proyecto Android en patch-android.mjs)

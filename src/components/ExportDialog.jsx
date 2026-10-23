@@ -3,7 +3,7 @@ import { LuX, LuDownload, LuCircleCheck, LuTriangleAlert } from 'react-icons/lu'
 import { useStore, setProject, projectSize } from '../store/store.js';
 import { RESOLUTIONS, FPS_OPTIONS } from '../lib/presets.js';
 import { startExport, cancelExport, closeExportDialog } from '../lib/exporter.js';
-import { saveVideo, saveToGallery, isNative } from '../lib/native.js';
+import { saveVideo, saveToGallery, isNative, isDesktop } from '../lib/native.js';
 import { timecode } from '../lib/time.js';
 import { Segmented } from './ui.jsx';
 
@@ -108,6 +108,11 @@ export default function ExportDialog() {
               {ex.result.name} · {ex.result.W}×{ex.result.H} · {ex.result.fps} fps · {mb(ex.result.size)}
               {ex.result.seconds ? ` · ${ex.result.seconds.toFixed(1)} s` : ''}
             </div>
+            {ex.result.convertError && (
+              <p className="text-[12px] text-[#e8756f]">
+                No se pudo convertir a MP4 ({ex.result.convertError}); se guarda en WebM.
+              </p>
+            )}
             {ex.result.short && (
               <div className="flex items-start gap-2 rounded-lg border border-[#e8756f]/40 px-3 py-2 text-[12px] text-[#e8756f]">
                 <LuTriangleAlert size={15} className="mt-0.5 shrink-0" />
@@ -140,7 +145,7 @@ export default function ExportDialog() {
               }}
               className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-accent text-[14px] font-semibold text-white hover:brightness-110"
             >
-              <LuDownload size={16} /> {isNative ? 'Compartir' : 'Descargar'}
+              <LuDownload size={16} /> {isNative ? 'Compartir' : isDesktop ? 'Guardar como…' : 'Descargar'}
             </button>
             {msg && <p className="text-[12px] text-[#b7b7c2]">{msg}</p>}
           </div>

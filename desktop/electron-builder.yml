@@ -1,0 +1,23 @@
+appId: com.linecut.desktop
+productName: LineCut
+directories:
+  output: dist
+files:
+  - main.cjs
+  - preload.cjs
+  - package.json
+  - app/**/*
+asarUnpack:
+  - node_modules/ffmpeg-static/**
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: AudioVideo
+  icon: build/icon.png
+  executableName: linecut
+  # Las AppImage no pueden tener el helper SUID del sandbox de Chromium; la app solo carga contenido propio.
+  executableArgs:
+    - --no-sandbox
+appImage:
+  artifactName: LineCut-${version}-x86_64.AppImage

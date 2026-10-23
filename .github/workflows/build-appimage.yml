@@ -1,0 +1,66 @@
+name: Build AppImage (Linux)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar dependencias de la web
+        run: bash scripts/ci-run.sh "npm install" npm install --no-audit --no-fund
+
+      - name: Compilar la web
+        run: bash scripts/ci-run.sh "npm run build" npm run build
+
+      - name: Preparar la app de escritorio
+        run: |
+          rm -rf desktop/app
+          cp -r dist desktop/app
+          cd desktop
+          bash ../scripts/ci-run.sh "npm install (desktop)" npm install --no-audit --no-fund
+
+      - name: Empaquetar AppImage
+        working-directory: desktop
+        run: bash ../scripts/ci-run.sh "electron-builder" npx electron-builder --linux AppImage --x64 --publish never
+
+      - name: Autodiagnóstico (arranca la app sin pantalla)
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y --no-install-recommends xvfb libfuse2t64 >/dev/null 2>&1 || true
+          APP=$(ls desktop/dist/*.AppImage | head -n1)
+          chmod +x "$APP"
+          set +e
+          timeout 120 xvfb-run -a "$APP" --appimage-extract-and-run --no-sandbox --selftest > selftest.log 2>&1
+          code=$?
+          RES=$(grep -h "SELFTEST_RESULT" selftest.log | head -n1)
+          if [ -z "$RES" ]; then RES="sin resultado (código $code): $(tail -n 12 selftest.log | tr '\n' ' ')"; fi
+          echo "::notice title=Autodiagnóstico AppImage (código $code)::$RES"
+          exit $code
+
+      - name: Subir AppImage como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: LineCut-AppImage
+          path: desktop/dist/*.AppImage
+
+      - name: Publicar release con la AppImage
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APP=$(ls desktop/dist/*.AppImage | head -n1)
+          cp "$APP" LineCut-x86_64.AppImage
+          gh release create "linecut-linux-${{ github.run_number }}" LineCut-x86_64.AppImage \
+            --title "LineCut para Linux (build ${{ github.run_number }})" \
+            --notes "AppImage de LineCut para Linux x86_64. Dale permisos de ejecución (chmod +x LineCut-x86_64.AppImage) y ábrela."

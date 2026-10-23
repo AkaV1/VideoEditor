@@ -24,3 +24,17 @@ node scripts/patch-android.mjs && npx cap sync android
 ```
 El APK se compila automáticamente en GitHub Actions (`.github/workflows/build-apk.yml`) y se publica
 en *Releases*.
+
+## Linux (AppImage)
+La versión de escritorio usa Electron y se empaqueta como AppImage en `.github/workflows/build-appimage.yml`
+(carpeta `desktop/`). Se publica en *Releases* como `LineCut-x86_64.AppImage`:
+
+```bash
+chmod +x LineCut-x86_64.AppImage
+./LineCut-x86_64.AppImage
+```
+- Los proyectos y sus medios se guardan en el perfil de la app (`~/.config/LineCut`).
+- Al exportar, Chromium graba WebM y la app lo convierte a **MP4 (H.264)** con ffmpeg (`ffmpeg-static`).
+  Ese binario de ffmpeg se distribuye bajo GPL; úsalo conforme a su licencia.
+- Para probar en local: `npm run build`, copiar `dist/` a `desktop/app/`, y en `desktop/` ejecutar
+  `npm install && npx electron .`
