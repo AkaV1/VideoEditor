@@ -75,7 +75,7 @@ export default function ExportDialog() {
               La exportación graba el video en tiempo real: tardará lo que dura el proyecto y debes mantener la app abierta.
             </div>
             <button
-              onClick={startExport}
+              onClick={() => startExport()}
               className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-accent text-[14px] font-semibold text-white hover:brightness-110"
             >
               <LuDownload size={16} /> Iniciar exportación
@@ -106,7 +106,17 @@ export default function ExportDialog() {
             <video src={ex.result.url} controls playsInline className="max-h-[38vh] w-full rounded-lg bg-black" />
             <div className="text-[12px] text-muted">
               {ex.result.name} · {ex.result.W}×{ex.result.H} · {ex.result.fps} fps · {mb(ex.result.size)}
+              {ex.result.seconds ? ` · ${ex.result.seconds.toFixed(1)} s` : ''}
             </div>
+            {ex.result.short && (
+              <div className="flex items-start gap-2 rounded-lg border border-[#e8756f]/40 px-3 py-2 text-[12px] text-[#e8756f]">
+                <LuTriangleAlert size={15} className="mt-0.5 shrink-0" />
+                <span>
+                  El video grabado dura {ex.result.seconds.toFixed(1)} s y el proyecto {ex.result.expected.toFixed(1)} s. Prueba a
+                  exportar de nuevo en 720P / 30 fps.
+                </span>
+              </div>
+            )}
             {isNative && gal && (
               <div
                 className={`rounded-lg border px-3 py-2 text-[12.5px] ${
