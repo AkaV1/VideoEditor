@@ -1,6 +1,7 @@
 // Exportación: se reproduce el proyecto en tiempo real sobre un canvas de la resolución elegida
 // y se graba (video del canvas + audio mezclado de Web Audio) con MediaRecorder.
 import { loadFonts } from './fonts.js';
+import { fixMp4Duration } from './mp4fix.js';
 import { store, getState, projectSize, seek, play, pause, toast } from '../store/store.js';
 import { engine } from './engine.js';
 
@@ -175,7 +176,8 @@ export async function startExport(override = null, attempt = 0) {
       throw new Error(recError ? `el grabador falló (${recError})` : 'el grabador se detuvo antes de terminar');
     }
 
-    const blob = new Blob(chunks, { type: mime.split(';')[0] });
+    let blob = new Blob(chunks, { type: mime.split(';')[0] });
+    if (ext === 'mp4') blob = await fixMp4Duration(blob); // escribe la duración real en la cabecera
     const url = URL.createObjectURL(blob);
     const safe = (s.project.name || 'LineCut').replace(/[^\w\- áéíóúñÁÉÍÓÚÑ]/g, '').trim() || 'LineCut';
     const seconds = await probeDuration(url);
