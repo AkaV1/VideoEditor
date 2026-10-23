@@ -7,6 +7,8 @@ const { pathToFileURL } = require('node:url');
 const { spawn } = require('node:child_process');
 
 app.commandLine.appendSwitch('no-sandbox');
+// Algunos sistemas tienen /dev/shm sin permisos de escritura (Chromium aborta con «shared memory»): usa /tmp.
+app.commandLine.appendSwitch('disable-dev-shm-usage');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 const SELFTEST = process.argv.includes('--selftest');
@@ -52,6 +54,15 @@ function createWindow() {
     if (!url.startsWith('app://')) e.preventDefault();
   });
   win.on('closed', () => (win = null));
+  // Si el renderizador se cae (p. ej. falta de memoria compartida), se registra y se recarga una vez.
+  let reloaded = false;
+  win.webContents.on('render-process-gone', (_e, details) => {
+    console.error('render-process-gone', JSON.stringify(details));
+    if (!reloaded && !SELFTEST && win) {
+      reloaded = true;
+      win.loadURL('app://linecut/index.html');
+    }
+  });
 
   if (SELFTEST) runSelfTest(win);
 }

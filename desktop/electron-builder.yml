@@ -19,5 +19,6 @@ linux:
   # Las AppImage no pueden tener el helper SUID del sandbox de Chromium; la app solo carga contenido propio.
   executableArgs:
     - --no-sandbox
+    - --disable-dev-shm-usage
 appImage:
   artifactName: LineCut-${version}-x86_64.AppImage
