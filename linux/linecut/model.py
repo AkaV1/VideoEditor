@@ -51,7 +51,7 @@ def base_clip(ctype: str, **extra) -> dict:
     c = {"id": uid("clip"), "type": ctype, "name": "", "start": 0.0, "duration": 3.0, "trimStart": 0.0,
          "speed": 1.0, "transform": dict(DEFAULT_TRANSFORM), "crop": dict(DEFAULT_CROP),
          "color": dict(DEFAULT_COLOR), "audio": dict(DEFAULT_AUDIO), "transitionIn": None,
-         "transitionOut": None, "keyframes": {}}
+         "transitionOut": None, "keyframes": {}, "effects": []}
     c.update(extra)
     return c
 

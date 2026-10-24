@@ -6,6 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
+from .effects import apply_pixel, motion
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .keyframes import eval_transform
@@ -226,6 +227,12 @@ def draw_clip(canvas: np.ndarray, clip: dict, local: float, k: float, layer: Ima
     tf = eval_transform(clip, local)
     st = {"alpha": tf["opacity"] / 100, "sc": tf["scale"] / 100, "dx": tf["x"] * k, "dy": tf["y"] * k,
           "rot": tf["rotation"], "wipe": None}
+    if clip.get("effects"):
+        mdx, mdy, msc, mrot = motion(clip["effects"], local, clip["duration"])
+        st["dx"] += mdx * k
+        st["dy"] += mdy * k
+        st["sc"] *= msc
+        st["rot"] += mrot
     tin, tout = clip.get("transitionIn"), clip.get("transitionOut")
     if tin and tin["duration"] > 0 and local < tin["duration"]:
         apply_transition(st, tin["type"], clamp(local / tin["duration"], 0, 1), False, W, H)
@@ -313,6 +320,8 @@ def render_frame(project: dict, t: float, W: int, H: int, provider, base_w: int 
             if fr is None:
                 continue
             fr = adjust_color(fr, c["color"])
+            if c.get("effects"):
+                fr = apply_pixel(fr, c["effects"], local, k)
             layer = Image.fromarray(fr, "RGB")
         if layer is not None:
             draw_clip(canvas, c, local, k, layer)

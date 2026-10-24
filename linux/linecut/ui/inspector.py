@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QHBoxLayout, QLabel, QPlain
 
 from ..keyframes import EASINGS, KF_LABELS, KF_PROPS, kf_index_at, value_at, props_for
 from ..model import BLEND_MODES, FILTERS, TRANSITIONS
+from ..effects import EFFECT_LABELS, MOTION_EFFECTS, PIXEL_EFFECTS, new_effect
 from ..render import font_families
 from .theme import MUTED
 from .widgets import ColorButton, PropSlider, section_label
@@ -83,6 +84,8 @@ class Inspector(QWidget):
         if t != "audio":
             self.tabs.addTab(self._scroll(self._tab_transform(c)), "Transformar")
             self.tabs.addTab(self._scroll(self._tab_color(c)), "Color")
+        if t != "audio":
+            self.tabs.addTab(self._scroll(self._tab_effects(c)), "Efectos")
         if t in ("video", "audio"):
             self.tabs.addTab(self._scroll(self._tab_audio(c)), "Audio")
         self.tabs.addTab(self._scroll(self._tab_time(c)), "Tiempo")
@@ -123,6 +126,60 @@ class Inspector(QWidget):
                 lay.addWidget(self._slider("crop", k, lab, 0, 90, 1, " %", 0, kf=False))
         lay.addStretch(1)
         return w
+
+    def _tab_effects(self, c):
+        w, lay = _page()
+        lay.addWidget(section_label("Añadir efecto"))
+        row = QHBoxLayout()
+        cb = QComboBox()
+        cb.addItem("Elige un efecto…", None)
+        cb.insertSeparator(1)
+        for key, label in MOTION_EFFECTS:
+            cb.addItem(f"Movimiento · {label}", key)
+        for key, label in PIXEL_EFFECTS:
+            if c["type"] != "text":
+                cb.addItem(f"Video · {label}", key)
+        cb.activated.connect(lambda _i, b=cb: self._add_effect(b))
+        row.addWidget(cb, 1)
+        lay.addLayout(row)
+        lay.addWidget(section_label("Efectos del clip"))
+        effs = c.get("effects", [])
+        if not effs:
+            hint = QLabel("Aún no hay efectos. Añade uno arriba.")
+            hint.setStyleSheet(f"color:{MUTED};")
+            lay.addWidget(hint)
+        for i, e in enumerate(effs):
+            r = QHBoxLayout()
+            sl = PropSlider(EFFECT_LABELS.get(e["type"], e["type"]), 0, 100, 1, " %", 0)
+            sl.label.setFixedWidth(120)
+            sl.changed.connect(lambda v, i=i: self._set_effect(i, v))
+            self.w[f"effect.{i}"] = sl
+            r.addWidget(sl, 1)
+            rm = QToolButton()
+            rm.setText("✕")
+            rm.setToolTip("Quitar efecto")
+            rm.clicked.connect(lambda _=False, i=i: self._del_effect(i))
+            r.addWidget(rm)
+            lay.addLayout(r)
+        lay.addStretch(1)
+        return w
+
+    def _add_effect(self, cb):
+        kind = cb.currentData()
+        c = self.ed.selected_clip()
+        if kind and c:
+            self.ed.doc.patch_clip(c["id"], lambda cl: cl.setdefault("effects", []).append(new_effect(kind)))
+        cb.setCurrentIndex(0)
+
+    def _set_effect(self, i, v):
+        c = self.ed.selected_clip()
+        if c and not self._syncing and i < len(c.get("effects", [])):
+            self.ed.doc.patch_clip(c["id"], lambda cl: cl["effects"][i].__setitem__("amount", v), f"fx:{i}:{c['id']}")
+
+    def _del_effect(self, i):
+        c = self.ed.selected_clip()
+        if c and i < len(c.get("effects", [])):
+            self.ed.doc.patch_clip(c["id"], lambda cl: cl["effects"].pop(i))
 
     def _tab_color(self, c):
         w, lay = _page()
@@ -313,11 +370,15 @@ class Inspector(QWidget):
 
     def refresh(self):
         c = self.ed.selected_clip()
-        key = (c["id"], c["type"]) if c else None
+        key = (c["id"], c["type"], tuple(e["type"] for e in c.get("effects", []))) if c else None
         if key != self.built_for:
+            same = bool(self.built_for) and bool(key) and self.built_for[0] == key[0] and self.tabs is not None
+            idx = self.tabs.currentIndex() if same else 0
             self.built_for = key
             self._syncing = True
             self.rebuild(c)
+            if same and self.tabs:
+                self.tabs.setCurrentIndex(min(idx, self.tabs.count() - 1))
             self._syncing = False
         if not c:
             return
@@ -345,6 +406,10 @@ class Inspector(QWidget):
                 elif isinstance(wd, QComboBox):
                     i = wd.findData(c[group][prop])
                     wd.blockSignals(True); wd.setCurrentIndex(max(0, i)); wd.blockSignals(False)
+        for i, e in enumerate(c.get("effects", [])):
+            sl = self.w.get(f"effect.{i}")
+            if sl:
+                sl.set_value(e["amount"])
         if "speed" in self.w:
             self.w["speed"].set_value(c["speed"])
         for key in ("transitionIn", "transitionOut"):

@@ -80,6 +80,16 @@ def _run(out_dir: Path, tmp: str) -> int:
     ed.inspector.refresh()
     pump()
     shot(w, "3-editor")
+    from .effects import new_effect
+    vcl = next(c for t in ed.doc.tracks for c in t["clips"] if c["type"] == "video")
+    ed.select(vcl["id"])
+    for kind in ("shake", "glitch", "rgbsplit", "vignette"):
+        ed.doc.patch_clip(vcl["id"], lambda cl, k=kind: cl.setdefault("effects", []).append(new_effect(k)))
+    ed.set_time(1.2)
+    ed.inspector.tabs.setCurrentIndex(ed.inspector.tabs.count() - 3)
+    pump(); shot(w, "3b-efectos")
+    ed.doc.undo(); ed.doc.undo(); ed.doc.undo(); ed.doc.undo()
+    ed.doc.patch_clip(vcl["id"], lambda cl: cl.__setitem__("effects", [new_effect("blur"), new_effect("zoomIn")]))
     # deshacer / rehacer / dividir
     n = len(ed.doc.tracks[1]["clips"]) + len(ed.doc.tracks[0]["clips"])
     vc = next(c for t in ed.doc.tracks for c in t["clips"] if c["type"] == "video")
