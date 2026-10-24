@@ -236,6 +236,9 @@ def draw_clip(canvas: np.ndarray, clip: dict, local: float, k: float, layer: Ima
     sc = st["sc"]
     if alpha <= 0.001 or sc <= 0.001:
         return
+    mode = tf.get("blend", "normal")
+    if layer.mode == "RGB" and (st["wipe"] or mode != "normal" or abs(st["rot"]) > 0.01):
+        layer = layer.convert("RGBA")  # estos casos necesitan canal alfa
     if tf.get("flipH"):
         layer = layer.transpose(Image.FLIP_LEFT_RIGHT)
     if tf.get("flipV"):
@@ -257,6 +260,15 @@ def draw_clip(canvas: np.ndarray, clip: dict, local: float, k: float, layer: Ima
     if ex1 <= ex0 or ey1 <= ey0:
         return
     part = np.asarray(layer.crop((sx0, sy0, sx0 + (ex1 - ex0), sy0 + (ey1 - ey0))))
+    if layer.mode == "RGB":
+        # camino rápido: capa opaca, aritmética entera
+        A = int(round(alpha * 256))
+        if A >= 256:
+            canvas[ey0:ey1, ex0:ex1] = part
+        else:
+            roi = canvas[ey0:ey1, ex0:ex1]
+            canvas[ey0:ey1, ex0:ex1] = ((roi.astype(np.uint16) * (256 - A) + part.astype(np.uint16) * A) >> 8).astype(np.uint8)
+        return
     a = part[:, :, 3:4].astype(np.float32) / 255 * alpha
     if st["wipe"]:
         wx0, wy0, wx1, wy1 = st["wipe"]
@@ -268,7 +280,6 @@ def draw_clip(canvas: np.ndarray, clip: dict, local: float, k: float, layer: Ima
         a = a * mask
     roi = canvas[ey0:ey1, ex0:ex1]
     src = part[:, :, :3]
-    mode = tf.get("blend", "normal")
     if mode != "normal":
         src = _blend(roi, src, mode)
     out = roi.astype(np.float32) * (1 - a) + src.astype(np.float32) * a
@@ -302,7 +313,7 @@ def render_frame(project: dict, t: float, W: int, H: int, provider, base_w: int 
             if fr is None:
                 continue
             fr = adjust_color(fr, c["color"])
-            layer = Image.fromarray(fr, "RGB").convert("RGBA")
+            layer = Image.fromarray(fr, "RGB")
         if layer is not None:
             draw_clip(canvas, c, local, k, layer)
     return canvas

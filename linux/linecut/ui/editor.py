@@ -42,30 +42,44 @@ class MediaList(QListWidget):
         return md
 
 
+def _find_player() -> list[str] | None:
+    """Reproductor de sistema que acepta PCM crudo por stdin (PipeWire, PulseAudio o ALSA)."""
+    import shutil
+    if shutil.which("pw-cat"):
+        return [shutil.which("pw-cat"), "-p", "--rate", str(audio.SR), "--channels", "2", "--format", "s16", "-"]
+    if shutil.which("paplay"):
+        return [shutil.which("paplay"), "--raw", f"--rate={audio.SR}", "--channels=2", "--format=s16le"]
+    if shutil.which("aplay"):
+        return [shutil.which("aplay"), "-q", "-t", "raw", "-f", "S16_LE", "-r", str(audio.SR), "-c", "2"]
+    return None
+
+
 class AudioPlayer:
-    """Reproduce la mezcla del proyecto con QAudioSink (si hay dispositivo de salida)."""
+    """Reproduce la mezcla del proyecto. Usa el reproductor del sistema (más fiable) y, si no hay, QAudioSink."""
 
     def __init__(self):
+        self.cmd = _find_player()
+        self.proc = None
         self.sink = None
         self.buf = None
         self.mix_key = None
         self.pcm: bytes = b""
-        try:
-            from PySide6.QtMultimedia import QAudioFormat, QAudioSink, QMediaDevices
-            dev = QMediaDevices.defaultAudioOutput()
-            if dev.isNull():
-                return
-            fmt = QAudioFormat()
-            fmt.setSampleRate(audio.SR)
-            fmt.setChannelCount(2)
-            fmt.setSampleFormat(QAudioFormat.SampleFormat.Int16)
-            self.sink = QAudioSink(dev, fmt)
-        except Exception:
-            self.sink = None
+        self.backend = "sistema" if self.cmd else "ninguno"
+        if not self.cmd:
+            try:
+                from PySide6.QtMultimedia import QAudioFormat, QAudioSink, QMediaDevices
+                dev = QMediaDevices.defaultAudioOutput()
+                if not dev.isNull():
+                    fmt = QAudioFormat()
+                    fmt.setSampleRate(audio.SR)
+                    fmt.setChannelCount(2)
+                    fmt.setSampleFormat(QAudioFormat.SampleFormat.Int16)
+                    self.sink = QAudioSink(dev, fmt)
+                    self.backend = "qt"
+            except Exception:
+                self.sink = None
 
     def prepare(self, doc: Document, paths: dict[str, str]):
-        if self.sink is None:
-            return
         key = hashlib.md5((doc.to_json()).encode()).hexdigest()
         if key == self.mix_key:
             return
@@ -79,17 +93,42 @@ class AudioPlayer:
 
     def play(self, t: float):
         self.stop()
-        if self.sink is None or not self.pcm:
+        if not self.pcm:
             return
         off = int(t * audio.SR) * 4
         if off >= len(self.pcm):
             return
-        self.buf = QBuffer()
-        self.buf.setData(QByteArray(self.pcm[off:]))
-        self.buf.open(QIODevice.OpenModeFlag.ReadOnly)
-        self.sink.start(self.buf)
+        data = self.pcm[off:]
+        if self.cmd:
+            import subprocess
+            import threading
+            try:
+                p = subprocess.Popen(self.cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL)
+            except OSError:
+                return
+            self.proc = p
+
+            def feed():
+                try:
+                    p.stdin.write(data)
+                    p.stdin.close()
+                except (BrokenPipeError, OSError, ValueError):
+                    pass
+            threading.Thread(target=feed, daemon=True).start()
+        elif self.sink is not None:
+            self.buf = QBuffer()
+            self.buf.setData(QByteArray(data))
+            self.buf.open(QIODevice.OpenModeFlag.ReadOnly)
+            self.sink.start(self.buf)
 
     def stop(self):
+        if self.proc is not None:
+            try:
+                self.proc.kill()
+            except Exception:
+                pass
+            self.proc = None
         if self.sink is not None:
             try:
                 self.sink.stop()
@@ -387,6 +426,10 @@ class Editor(QWidget):
             self.audio.prepare(self.doc, self.paths)
         finally:
             QApplication_restore()
+        if self.audio.pcm and self.audio.backend == "ninguno" and not getattr(self, "_warned_audio", False):
+            self._warned_audio = True
+            QMessageBox.information(self, "LineCut", "No se encontró una salida de audio (pw-cat, paplay o aplay).\n"
+                                    "La vista previa se verá sin sonido, pero el video exportado sí lleva audio.")
         self.playing = True
         self.play_b.setText("⏸")
         self._play_t0, self._play_wall = self.t, time.monotonic()

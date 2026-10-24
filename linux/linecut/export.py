@@ -13,6 +13,11 @@ from .model import calc_duration, project_size
 from .render import render_frame
 from .util import ffmpeg_path
 
+import json
+import shutil
+import sys
+import threading
+
 
 class Cancelled(Exception):
     pass
@@ -35,6 +40,9 @@ def export_project(project: dict, paths: dict[str, str], out_path: str, res: int
         raise ValueError("El proyecto está vacío")
     W, H = export_size(project, res)
     n_frames = int(math.ceil(duration * fps))
+    workers = _worker_count(n_frames)
+    if workers > 1:
+        return _export_parallel(project, paths, out_path, W, H, fps, duration, n_frames, workers, progress, cancelled)
     tmp = tempfile.mkdtemp(prefix="linecut-")
     wav = None
     proc = None
@@ -90,3 +98,102 @@ def export_project(project: dict, paths: dict[str, str], out_path: str, res: int
             os.rmdir(tmp)
         except OSError:
             pass
+
+
+def _worker_count(n_frames: int) -> int:
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except AttributeError:
+        cores = os.cpu_count() or 1
+    env = os.environ.get("LINECUT_WORKERS")
+    if env and env.isdigit():
+        cores = int(env)
+    if n_frames < 90:
+        return 1
+    return max(1, min(cores, 8, n_frames // 45))
+
+
+def _self_cmd() -> list[str]:
+    if getattr(sys, "frozen", False):
+        return [sys.executable]
+    return [sys.executable, "-m", "linecut"]
+
+
+def _export_parallel(project, paths, out_path, W, H, fps, duration, n_frames, workers, progress, cancelled):
+    """Reparte los fotogramas entre procesos, cada uno codifica su tramo; después se unen con el audio."""
+    media = project["media"]
+    tmp = tempfile.mkdtemp(prefix="linecut-")
+    procs: list[subprocess.Popen] = []
+    counts = [0] * workers
+    errors: list[str] = []
+    try:
+        if progress:
+            progress(0.0, "Mezclando audio…")
+        wav = None
+        if audio.has_audio_clips(project, media):
+            wav = os.path.join(tmp, "mix.wav")
+            audio.write_wav(wav, audio.mix(project, media, paths, duration))
+        bounds = [round(n_frames * k / workers) for k in range(workers + 1)]
+        segs = []
+        threads_each = max(1, (os.cpu_count() or 2) // workers)
+        for k in range(workers):
+            seg = os.path.join(tmp, f"seg{k}.mp4")
+            jf = os.path.join(tmp, f"job{k}.json")
+            with open(jf, "w", encoding="utf-8") as f:
+                json.dump({"project": project, "paths": paths, "W": W, "H": H, "fps": fps, "i0": bounds[k],
+                           "i1": bounds[k + 1], "duration": duration, "out": seg, "threads": threads_each}, f)
+            segs.append(seg)
+            procs.append(subprocess.Popen(_self_cmd() + ["--render-segment", jf], stdout=subprocess.PIPE,
+                                          stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, text=True))
+
+        def reader(k, p):
+            for line in p.stdout:
+                if line.startswith("P "):
+                    counts[k] = int(line[2:])
+                elif line.startswith("E "):
+                    errors.append(line[2:].strip())
+
+        ths = [threading.Thread(target=reader, args=(k, p), daemon=True) for k, p in enumerate(procs)]
+        for t in ths:
+            t.start()
+        import time
+        while any(p.poll() is None for p in procs):
+            if cancelled and cancelled():
+                raise Cancelled()
+            if progress:
+                done = sum(counts)
+                progress(min(0.97, done / n_frames) * 0.96, f"Renderizando fotograma {done} de {n_frames}")
+            time.sleep(0.15)
+        for t in ths:
+            t.join(2)
+        if any(p.returncode != 0 for p in procs):
+            raise RuntimeError("Falló el render: " + (errors[0] if errors else "un proceso terminó con error"))
+        if progress:
+            progress(0.97, "Uniendo tramos…")
+        lst = os.path.join(tmp, "list.txt")
+        with open(lst, "w", encoding="utf-8") as f:
+            for s in segs:
+                f.write(f"file '{s}'\n")
+        cmd = [ffmpeg_path(), "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", lst]
+        if wav:
+            cmd += ["-i", wav, "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-t", f"{duration:.3f}"]
+        else:
+            cmd += ["-c:v", "copy"]
+        cmd += ["-movflags", "+faststart", out_path]
+        r = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        if r.returncode != 0:
+            raise RuntimeError("ffmpeg falló al unir: " + r.stderr.decode("utf-8", "replace")[-300:])
+        if progress:
+            progress(1.0, "Listo")
+    except BaseException:
+        for p in procs:
+            if p.poll() is None:
+                p.kill()
+        if os.path.exists(out_path):
+            try:
+                os.remove(out_path)
+            except OSError:
+                pass
+        raise
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
