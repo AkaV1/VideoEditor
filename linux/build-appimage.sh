@@ -29,6 +29,9 @@ for lib in libxcb-cursor.so.0 libxcb-icccm.so.4 libxcb-image.so.0 libxcb-keysyms
 done
 
 cp linecut/assets/logo.png AppDir/linecut.png
+cp linecut/assets/logo.png AppDir/.DirIcon
+mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
+cp linecut/assets/logo.png AppDir/usr/share/icons/hicolor/512x512/apps/linecut.png
 cat > AppDir/linecut.desktop <<'DESK'
 [Desktop Entry]
 Type=Application
