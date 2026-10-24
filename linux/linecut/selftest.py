@@ -11,6 +11,8 @@ from pathlib import Path
 
 
 def run(argv) -> int:
+    import faulthandler
+    faulthandler.dump_traceback_later(150, exit=True)
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     out_dir = Path(argv[argv.index("--selftest") + 1]) if len(argv) > argv.index("--selftest") + 1 else Path(tempfile.mkdtemp())
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -90,6 +92,7 @@ def _run(out_dir: Path, tmp: str) -> int:
     shot(w, "4-inspector")
     # reproducción breve
     ed.set_time(0.0)
+    print('selftest: reproduccion', flush=True)
     ed.play(); pump(500); ed.stop()
     assert ed.t > 0.1, "reproducción"
     # guardar, volver a inicio y reabrir
@@ -99,6 +102,7 @@ def _run(out_dir: Path, tmp: str) -> int:
     pid = storage.list_projects()[0]["id"]
     w.open(pid); pump(300)
     assert sum(len(t["clips"]) for t in w.editor.doc.tracks) == n + 1, "reabrir"
+    print('selftest: exportacion', flush=True)
     # exportación real (sin pantalla)
     dlg = ExportDialog(w.editor.doc, w.editor.paths, w)
     dlg.path.setText(os.path.join(tmp, "salida.mp4"))
