@@ -428,8 +428,10 @@ class Editor(QWidget):
             QApplication_restore()
         if self.audio.pcm and self.audio.backend == "ninguno" and not getattr(self, "_warned_audio", False):
             self._warned_audio = True
-            QMessageBox.information(self, "LineCut", "No se encontró una salida de audio (pw-cat, paplay o aplay).\n"
-                                    "La vista previa se verá sin sonido, pero el video exportado sí lleva audio.")
+            from PySide6.QtGui import QGuiApplication
+            if QGuiApplication.platformName() != "offscreen":
+                QMessageBox.information(self, "LineCut", "No se encontró una salida de audio (pw-cat, paplay o aplay).\n"
+                                        "La vista previa se verá sin sonido, pero el video exportado sí lleva audio.")
         self.playing = True
         self.play_b.setText("⏸")
         self._play_t0, self._play_wall = self.t, time.monotonic()
