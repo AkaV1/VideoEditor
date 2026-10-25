@@ -1,4 +1,8 @@
+import os
 import sys
+
+if sys.stdout is None:  # .exe sin consola
+    sys.stdout = sys.stderr = open(os.devnull, "w")
 
 if "--render-segment" in sys.argv:
     from linecut.segment import main as _seg

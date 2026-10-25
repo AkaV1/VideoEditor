@@ -135,37 +135,44 @@ def _export_parallel(project, paths, out_path, W, H, fps, duration, n_frames, wo
             audio.write_wav(wav, audio.mix(project, media, paths, duration))
         bounds = [round(n_frames * k / workers) for k in range(workers + 1)]
         segs = []
+        progs: list[str] = []
         threads_each = max(1, (os.cpu_count() or 2) // workers)
         for k in range(workers):
             seg = os.path.join(tmp, f"seg{k}.mp4")
             jf = os.path.join(tmp, f"job{k}.json")
+            progs.append(os.path.join(tmp, f"prog{k}.txt"))
             with open(jf, "w", encoding="utf-8") as f:
                 json.dump({"project": project, "paths": paths, "W": W, "H": H, "fps": fps, "i0": bounds[k],
-                           "i1": bounds[k + 1], "duration": duration, "out": seg, "threads": threads_each}, f)
+                           "i1": bounds[k + 1], "duration": duration, "out": seg, "threads": threads_each,
+                           "progress": progs[k]}, f)
             segs.append(seg)
-            procs.append(subprocess.Popen(_self_cmd() + ["--render-segment", jf], stdout=subprocess.PIPE,
-                                          stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, text=True))
+            procs.append(subprocess.Popen(_self_cmd() + ["--render-segment", jf], stdout=subprocess.DEVNULL,
+                                          stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL))
 
-        def reader(k, p):
-            for line in p.stdout:
-                if line.startswith("P "):
-                    counts[k] = int(line[2:])
-                elif line.startswith("E "):
-                    errors.append(line[2:].strip())
+        def poll_progress():
+            for k, pf in enumerate(progs):
+                try:
+                    txt = open(pf, encoding="utf-8").read().strip()
+                except OSError:
+                    continue
+                if txt.startswith("P "):
+                    try:
+                        counts[k] = int(txt[2:])
+                    except ValueError:
+                        pass
+                elif txt.startswith("E "):
+                    errors.append(txt[2:])
 
-        ths = [threading.Thread(target=reader, args=(k, p), daemon=True) for k, p in enumerate(procs)]
-        for t in ths:
-            t.start()
         import time
         while any(p.poll() is None for p in procs):
             if cancelled and cancelled():
                 raise Cancelled()
+            poll_progress()
             if progress:
                 done = sum(counts)
                 progress(min(0.97, done / n_frames) * 0.96, f"Renderizando fotograma {done} de {n_frames}")
             time.sleep(0.15)
-        for t in ths:
-            t.join(2)
+        poll_progress()
         if any(p.returncode != 0 for p in procs):
             raise RuntimeError("Falló el render: " + (errors[0] if errors else "un proceso terminó con error"))
         if progress:
@@ -173,7 +180,7 @@ def _export_parallel(project, paths, out_path, W, H, fps, duration, n_frames, wo
         lst = os.path.join(tmp, "list.txt")
         with open(lst, "w", encoding="utf-8") as f:
             for s in segs:
-                f.write(f"file '{s}'\n")
+                f.write("file '" + s.replace("\\", "/") + "'\n")
         cmd = [ffmpeg_path(), "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", lst]
         if wav:
             cmd += ["-i", wav, "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-t", f"{duration:.3f}"]

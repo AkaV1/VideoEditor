@@ -18,11 +18,15 @@ def run(argv) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="linecut-selftest-")
     os.environ["LINECUT_HOME"] = tmp
+    res = out_dir / "result.txt"
     try:
-        return _run(out_dir, tmp)
+        code = _run(out_dir, tmp)
+        res.write_text("SELFTEST OK\n", encoding="utf-8")
+        return code
     except Exception:  # noqa: BLE001
         traceback.print_exc()
         print("SELFTEST FAILED")
+        res.write_text("SELFTEST FAILED\n" + traceback.format_exc(), encoding="utf-8")
         return 1
 
 

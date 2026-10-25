@@ -23,6 +23,16 @@ def main(job_file: str) -> int:
     job = json.load(open(job_file, encoding="utf-8"))
     project, paths = job["project"], job["paths"]
     W, H, fps, i0, i1, duration = job["W"], job["H"], job["fps"], job["i0"], job["i1"], job["duration"]
+    prog = job.get("progress")
+
+    def report(msg: str):
+        if prog:
+            try:
+                with open(prog, "w", encoding="utf-8") as f:
+                    f.write(msg)
+            except OSError:
+                pass
+
     provider = FrameProvider(paths, project["media"], fps)
     proc = subprocess.Popen(x264_cmd(W, H, fps, job["out"], job.get("threads", 2)), stdin=subprocess.PIPE,
                             stderr=subprocess.PIPE)
@@ -31,16 +41,16 @@ def main(job_file: str) -> int:
             frame = render_frame(project, min(i / fps, duration - 1e-6), W, H, provider)
             proc.stdin.write(frame.tobytes())
             if n % 2 == 0:
-                print(f"P {n + 1}", flush=True)
+                report(f"P {n + 1}")
         proc.stdin.close()
         err = proc.stderr.read().decode("utf-8", "replace")
         if proc.wait() != 0:
-            print(f"E {err[-300:]}", flush=True)
+            report(f"E {err[-300:]}")
             return 1
-        print(f"P {i1 - i0}", flush=True)
+        report(f"P {i1 - i0}")
         return 0
     except BrokenPipeError:
-        print("E ffmpeg cerró la entrada", flush=True)
+        report("E ffmpeg cerró la entrada")
         return 1
     finally:
         provider.close()

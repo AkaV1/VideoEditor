@@ -1,0 +1,79 @@
+name: Build LineCut Windows
+
+on:
+  push:
+    branches: [main]
+    paths: ["linux/**", ".github/workflows/build-windows.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Prueba del núcleo (sin interfaz)
+        working-directory: linux
+        run: |
+          python -m pip install -r requirements.txt
+          bash ../scripts/ci-run.sh "prueba del núcleo" python tests/test_core.py
+
+      - name: Autoprueba de la interfaz (desde el código)
+        working-directory: linux
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: bash ../scripts/ci-run.sh "autoprueba de la interfaz" python -m linecut --selftest shots
+
+      - name: Empaquetar con PyInstaller
+        working-directory: linux
+        run: bash ../scripts/ci-run.sh "build-windows" bash build-windows.sh
+
+      - name: Autoprueba del .exe empaquetado
+        working-directory: linux
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $p = Start-Process -FilePath "dist\LineCut\LineCut.exe" -ArgumentList "--selftest","shots-exe" -Wait -PassThru
+          $r = if (Test-Path shots-exe\result.txt) { (Get-Content shots-exe\result.txt -Raw) } else { "sin result.txt" }
+          Write-Host $r
+          if ($p.ExitCode -ne 0 -or $r -notmatch "SELFTEST OK") {
+            $msg = ($r -replace "`r?`n", "%0A")
+            Write-Host "::error title=Autoprueba del .exe falló (código $($p.ExitCode))::$msg"
+            exit 1
+          }
+
+      - name: Crear instalador y zip
+        working-directory: linux
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          & $iscc installer.iss
+          Compress-Archive -Path dist\LineCut -DestinationPath out\LineCut-Windows.zip
+          Get-ChildItem out | Format-Table Name, Length
+
+      - name: Subir artefactos
+        uses: actions/upload-artifact@v4
+        with:
+          name: LineCut-Windows
+          path: |
+            linux/out/*
+            linux/shots-exe/*.png
+
+      - name: Publicar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "linecut-windows-${{ github.run_number }}" linux/out/LineCut-Setup.exe linux/out/LineCut-Windows.zip \
+            --title "LineCut para Windows (build ${{ github.run_number }})" \
+            --notes "Instalador (LineCut-Setup.exe) o versión portátil (LineCut-Windows.zip: descomprime y abre LineCut.exe). Windows 10/11 de 64 bits. Si SmartScreen avisa, pulsa «Más información» → «Ejecutar de todos modos» (la app no está firmada)."

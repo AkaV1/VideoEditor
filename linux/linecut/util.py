@@ -22,8 +22,25 @@ def clamp(v: float, a: float, b: float) -> float:
     return min(b, max(a, v))
 
 
+if os.name == "nt":
+    # En Windows ninguna llamada a ffmpeg debe abrir una ventana de consola
+    import subprocess as _sp
+
+    _Popen = _sp.Popen
+
+    class _QuietPopen(_Popen):
+        def __init__(self, *a, **kw):
+            kw.setdefault("creationflags", 0x08000000)  # CREATE_NO_WINDOW
+            super().__init__(*a, **kw)
+
+    _sp.Popen = _QuietPopen
+
+
 def data_dir() -> Path:
-    base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    if os.name == "nt" and not os.environ.get("LINECUT_HOME"):
+        base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
     p = Path(os.environ.get("LINECUT_HOME") or Path(base) / "LineCut")
     p.mkdir(parents=True, exist_ok=True)
     return p
