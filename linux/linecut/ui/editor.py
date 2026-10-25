@@ -42,42 +42,59 @@ class MediaList(QListWidget):
         return md
 
 
-def _find_player() -> list[str] | None:
-    """Reproductor de sistema que acepta PCM crudo por stdin (PipeWire, PulseAudio o ALSA)."""
+def _find_players() -> list[list[str]]:
+    """Reproductores de sistema que aceptan PCM crudo por stdin (PipeWire, PulseAudio o ALSA), por orden."""
     import shutil
+    out = []
     if shutil.which("pw-cat"):
-        return [shutil.which("pw-cat"), "-p", "--rate", str(audio.SR), "--channels", "2", "--format", "s16", "-"]
+        out.append([shutil.which("pw-cat"), "-p", "--rate", str(audio.SR), "--channels", "2", "--format", "s16", "-"])
     if shutil.which("paplay"):
-        return [shutil.which("paplay"), "--raw", f"--rate={audio.SR}", "--channels=2", "--format=s16le"]
+        out.append([shutil.which("paplay"), "--raw", f"--rate={audio.SR}", "--channels=2", "--format=s16le"])
     if shutil.which("aplay"):
-        return [shutil.which("aplay"), "-q", "-t", "raw", "-f", "S16_LE", "-r", str(audio.SR), "-c", "2"]
-    return None
+        out.append([shutil.which("aplay"), "-q", "-t", "raw", "-f", "S16_LE", "-r", str(audio.SR), "-c", "2"])
+    return out
 
 
 class AudioPlayer:
-    """Reproduce la mezcla del proyecto. Usa el reproductor del sistema (más fiable) y, si no hay, QAudioSink."""
+    """Reproduce la mezcla del proyecto con el reproductor del sistema; si uno falla prueba el siguiente
+    y, como último recurso, QAudioSink."""
 
     def __init__(self):
-        self.cmd = _find_player()
         self.proc = None
         self.sink = None
         self.buf = None
         self.mix_key = None
         self.pcm: bytes = b""
-        self.backend = "sistema" if self.cmd else "ninguno"
-        if not self.cmd:
-            try:
-                from PySide6.QtMultimedia import QAudioFormat, QAudioSink, QMediaDevices
-                dev = QMediaDevices.defaultAudioOutput()
-                if not dev.isNull():
-                    fmt = QAudioFormat()
-                    fmt.setSampleRate(audio.SR)
-                    fmt.setChannelCount(2)
-                    fmt.setSampleFormat(QAudioFormat.SampleFormat.Int16)
-                    self.sink = QAudioSink(dev, fmt)
-                    self.backend = "qt"
-            except Exception:
-                self.sink = None
+        self.started = 0.0
+        self.last_t = 0.0
+        self.reset()
+
+    def reset(self):
+        """Vuelve a detectar los reproductores (por si el servidor de audio cambió) y olvida la mezcla."""
+        self.stop()
+        self.cands = _find_players()
+        self.idx = 0
+        self.mix_key = None
+        self.sink = None
+        self.qt_ok = False
+        try:
+            from PySide6.QtMultimedia import QAudioFormat, QAudioSink, QMediaDevices
+            dev = QMediaDevices.defaultAudioOutput()
+            if not dev.isNull():
+                fmt = QAudioFormat()
+                fmt.setSampleRate(audio.SR)
+                fmt.setChannelCount(2)
+                fmt.setSampleFormat(QAudioFormat.SampleFormat.Int16)
+                self.sink = QAudioSink(dev, fmt)
+                self.qt_ok = True
+        except Exception:
+            self.sink = None
+
+    @property
+    def backend(self) -> str:
+        if self.idx < len(self.cands):
+            return Path(self.cands[self.idx][0]).name
+        return "qt" if self.qt_ok else "ninguno"
 
     def prepare(self, doc: Document, paths: dict[str, str]):
         key = hashlib.md5((doc.to_json()).encode()).hexdigest()
@@ -93,21 +110,24 @@ class AudioPlayer:
 
     def play(self, t: float):
         self.stop()
+        self.last_t = t
         if not self.pcm:
             return
         off = int(t * audio.SR) * 4
         if off >= len(self.pcm):
             return
         data = self.pcm[off:]
-        if self.cmd:
+        if self.idx < len(self.cands):
             import subprocess
             import threading
             try:
-                p = subprocess.Popen(self.cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                p = subprocess.Popen(self.cands[self.idx], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                                      stderr=subprocess.DEVNULL)
             except OSError:
-                return
+                self.idx += 1
+                return self.play(t)
             self.proc = p
+            self.started = time.monotonic()
 
             def feed():
                 try:
@@ -121,6 +141,16 @@ class AudioPlayer:
             self.buf.setData(QByteArray(data))
             self.buf.open(QIODevice.OpenModeFlag.ReadOnly)
             self.sink.start(self.buf)
+
+    def check(self, t: float) -> bool:
+        """Si el reproductor murió nada más empezar con error, pasa al siguiente. True si cambió de reproductor."""
+        p = self.proc
+        if p is not None and p.poll() not in (None, 0) and time.monotonic() - self.started < 3.0:
+            self.proc = None
+            self.idx += 1
+            self.play(t)
+            return True
+        return False
 
     def stop(self):
         if self.proc is not None:
@@ -273,6 +303,9 @@ class Editor(QWidget):
         self.time_lbl.setStyleSheet("font-family:monospace;")
         l.addWidget(self.time_lbl)
         l.addStretch(1)
+        self.audio_lbl = QLabel("")
+        self.audio_lbl.setStyleSheet("color:#8b8b97;font-size:11px;")
+        l.addWidget(self.audio_lbl)
         for txt, tip, fn in (("⏮", "Inicio", lambda: self.set_time(0)),
                              ("◀", "Fotograma anterior", lambda: self.step(-1)),
                              ("▶", "Reproducir / pausa (Espacio)", self.toggle_play),
@@ -433,10 +466,20 @@ class Editor(QWidget):
                 QMessageBox.information(self, "LineCut", "No se encontró una salida de audio (pw-cat, paplay o aplay).\n"
                                         "La vista previa se verá sin sonido, pero el video exportado sí lleva audio.")
         self.playing = True
+        self._show_audio_state()
         self.play_b.setText("⏸")
         self._play_t0, self._play_wall = self.t, time.monotonic()
         self.audio.play(self.t)
         self.timer.start()
+
+    def _show_audio_state(self):
+        a = self.audio
+        if not a.pcm:
+            self.audio_lbl.setText("")
+        elif a.backend == "ninguno":
+            self.audio_lbl.setText("🔇 sin salida de audio")
+        else:
+            self.audio_lbl.setText(f"🔊 {a.backend}")
 
     def stop(self):
         was = self.playing
@@ -453,6 +496,8 @@ class Editor(QWidget):
             return
         self._rendering = True
         try:
+            if self.audio.check(self.t):
+                self._show_audio_state()
             t = self._play_t0 + (time.monotonic() - self._play_wall)
             if t >= self.doc.duration:
                 self.t = self.doc.duration

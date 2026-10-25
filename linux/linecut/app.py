@@ -91,6 +91,7 @@ class MainWindow(QMainWindow):
         self.editor.stop()
         storage.save(d)
         ExportDialog(d, self.editor.paths, self).exec()
+        self.editor.audio.reset()  # tras exportar, vuelve a detectar el audio y recalcula la mezcla
 
     def tutorial(self):
         TutorialDialog(self).exec()

@@ -125,6 +125,8 @@ def apply_pixel(rgb: np.ndarray, effects: list[dict] | None, local: float, k: fl
             half = w // 2
             out[:, w - half:] = rgb[:, :half][:, ::-1]
             rgb = out
+        elif kind == "flash":
+            rgb = (rgb.astype(np.float32) * (1 - a) + 255 * a).astype(np.uint8)
         elif kind == "negative":
             rgb = (rgb.astype(np.float32) * (1 - a) + (255 - rgb.astype(np.float32)) * a).astype(np.uint8)
     return np.ascontiguousarray(rgb)

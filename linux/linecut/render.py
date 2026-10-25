@@ -198,6 +198,52 @@ def apply_transition(st: dict, kind: str, p: float, out: bool, W: int, H: int):
         st["rot"] += d * (1 - e) * 180
         st["sc"] *= e
         st["alpha"] *= e
+    elif kind == "slideDown":
+        st["dy"] -= d * (1 - e) * H
+    elif kind == "wipeLeft":
+        st["wipe"] = (0, 0, W * e, H) if out else (W * (1 - e), 0, W, H)
+    elif kind == "wipeUp":
+        st["wipe"] = (0, 0, W, H * e) if out else (0, H * (1 - e), W, H)
+    elif kind == "bounce":
+        c1 = 1.70158
+        back = 1 + (c1 + 1) * (p - 1) ** 3 + c1 * (p - 1) ** 2
+        st["sc"] *= max(0.0, back)
+        st["alpha"] *= min(1.0, p * 4)
+    elif kind == "shake":
+        a = 1 - p
+        st["dx"] += a * 0.07 * W * math.sin(p * 60)
+        st["dy"] += a * 0.04 * H * math.cos(p * 47)
+        st["rot"] += a * 5 * math.sin(p * 53)
+        st["alpha"] *= min(1.0, p * 3)
+    elif kind == "whip":
+        st["dx"] += d * (1 - e) * W
+        st.setdefault("fx", []).append({"type": "blur", "amount": (1 - e) * 80})
+    elif kind == "flash":
+        st.setdefault("fx", []).append({"type": "flash", "amount": (1 - e) * 100})
+        st["alpha"] *= 0.35 + 0.65 * e
+    elif kind == "blur":
+        st.setdefault("fx", []).append({"type": "blur", "amount": (1 - e) * 100})
+        st["alpha"] *= min(1.0, e * 2)
+    elif kind == "glitch":
+        st.setdefault("fx", []).extend([{"type": "glitch", "amount": (1 - p) * 100},
+                                        {"type": "rgbsplit", "amount": (1 - p) * 60}])
+        st["alpha"] *= min(1.0, p * 5)
+    elif kind == "pixelate":
+        st.setdefault("fx", []).append({"type": "pixelate", "amount": (1 - e) * 100})
+        st["alpha"] *= min(1.0, p * 3)
+    elif kind == "rgbsplit":
+        st.setdefault("fx", []).append({"type": "rgbsplit", "amount": (1 - e) * 100})
+        st["alpha"] *= min(1.0, e * 2)
+
+
+def _fx_layer(layer: Image.Image, fx: list[dict], local: float, k: float) -> Image.Image:
+    """Aplica efectos de imagen (de transición) a una capa RGB o RGBA."""
+    arr = np.asarray(layer)
+    rgb = apply_pixel(np.ascontiguousarray(arr[:, :, :3]), fx, local, k)
+    if layer.mode == "RGBA":
+        rgb = np.dstack([rgb, arr[:, :, 3]])
+        return Image.fromarray(np.ascontiguousarray(rgb), "RGBA")
+    return Image.fromarray(rgb, "RGB")
 
 
 # --------------------------------------------------------------- composición
@@ -244,6 +290,8 @@ def draw_clip(canvas: np.ndarray, clip: dict, local: float, k: float, layer: Ima
     if alpha <= 0.001 or sc <= 0.001:
         return
     mode = tf.get("blend", "normal")
+    if st.get("fx"):
+        layer = _fx_layer(layer, st["fx"], local, k)
     if layer.mode == "RGB" and (st["wipe"] or mode != "normal" or abs(st["rot"]) > 0.01):
         layer = layer.convert("RGBA")  # estos casos necesitan canal alfa
     if tf.get("flipH"):

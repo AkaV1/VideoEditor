@@ -14,7 +14,10 @@ BLEND_MODES = [("normal", "Normal"), ("multiply", "Multiplicar"), ("screen", "Tr
                ("darken", "Oscurecer"), ("lighten", "Aclarar"), ("difference", "Diferencia")]
 TRANSITIONS = [("none", "Ninguna"), ("fade", "Fundido"), ("zoomIn", "Zoom +"), ("zoomOut", "Zoom −"),
                ("slideLeft", "Deslizar ←"), ("slideRight", "Deslizar →"), ("slideUp", "Deslizar ↑"),
-               ("wipeRight", "Cortina →"), ("wipeDown", "Cortina ↓"), ("spin", "Giro")]
+               ("slideDown", "Deslizar ↓"), ("wipeRight", "Cortina →"), ("wipeLeft", "Cortina ←"),
+               ("wipeDown", "Cortina ↓"), ("wipeUp", "Cortina ↑"), ("spin", "Giro"), ("bounce", "Rebote"),
+               ("shake", "Sacudida"), ("whip", "Latigazo"), ("flash", "Destello"), ("blur", "Desenfoque"),
+               ("glitch", "Glitch"), ("pixelate", "Pixelado"), ("rgbsplit", "Aberración RGB")]
 FILTERS = [("none", "Sin filtro"), ("bw", "Blanco y negro"), ("sepia", "Sepia"), ("warm", "Cálido"),
            ("cool", "Frío"), ("vivid", "Vívido"), ("fade", "Desvanecido"), ("noir", "Noir")]
 
