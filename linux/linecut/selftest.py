@@ -10,6 +10,13 @@ import traceback
 from pathlib import Path
 
 
+def _quit(code: int):
+    """Sale sin destruir Qt (en algunos sistemas la destrucción al cerrar provoca un fallo tras terminar bien)."""
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)
+
+
 def run(argv) -> int:
     import faulthandler
     faulthandler.dump_traceback_later(150, exit=True)
@@ -22,12 +29,12 @@ def run(argv) -> int:
     try:
         code = _run(out_dir, tmp)
         res.write_text("SELFTEST OK\n", encoding="utf-8")
-        return code
+        _quit(code)
     except Exception:  # noqa: BLE001
         traceback.print_exc()
         print("SELFTEST FAILED")
         res.write_text("SELFTEST FAILED\n" + traceback.format_exc(), encoding="utf-8")
-        return 1
+        _quit(1)
 
 
 def _run(out_dir: Path, tmp: str) -> int:
