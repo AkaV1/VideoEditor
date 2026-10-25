@@ -214,14 +214,14 @@ class FrameProvider:
             img = self.images.get(key)
             if img is None:
                 with Image.open(path) as im:
+                    has_alpha = im.mode in ("RGBA", "LA", "PA") or "transparency" in im.info
                     im = im.convert("RGBA")
                     w, h = im.size
                     box = (int(w * cr["left"] / 100), int(h * cr["top"] / 100), int(w * (1 - cr["right"] / 100)),
                            int(h * (1 - cr["bottom"] / 100)))
                     im = im.crop(box).resize((fw, fh), Image.BILINEAR)
-                    bg = Image.new("RGBA", im.size, (0, 0, 0, 255))
-                    bg.alpha_composite(im)
-                    img = np.asarray(bg.convert("RGB")).copy()
+                    # con transparencia se devuelve RGBA (la capa conserva el canal alfa); sin ella, RGB
+                    img = np.asarray(im).copy() if has_alpha else np.asarray(im.convert("RGB")).copy()
                 if len(self.images) > 12:
                     self.images.clear()
                 self.images[key] = img

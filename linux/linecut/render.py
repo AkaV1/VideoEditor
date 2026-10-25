@@ -367,10 +367,15 @@ def render_frame(project: dict, t: float, W: int, H: int, provider, base_w: int 
             fr = provider.frame(c, local, W, H)
             if fr is None:
                 continue
+            alpha_ch = fr[:, :, 3] if fr.shape[2] == 4 else None
+            fr = np.ascontiguousarray(fr[:, :, :3]) if alpha_ch is not None else fr
             fr = adjust_color(fr, c["color"])
             if c.get("effects"):
                 fr = apply_pixel(fr, c["effects"], local, k)
-            layer = Image.fromarray(fr, "RGB")
+            if alpha_ch is not None:
+                layer = Image.fromarray(np.ascontiguousarray(np.dstack([fr, alpha_ch])), "RGBA")
+            else:
+                layer = Image.fromarray(fr, "RGB")
         if layer is not None:
             draw_clip(canvas, c, local, k, layer)
     return canvas
