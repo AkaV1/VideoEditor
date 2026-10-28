@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import {
   LuImport, LuType, LuSticker, LuSparkles, LuArrowLeftRight, LuMusic, LuPlus, LuPlay, LuPause,
-  LuFilm, LuImage, LuMusic2, LuUpload, LuLoader,
+  LuFilm, LuImage, LuMusic2, LuUpload, LuLoader, LuWandSparkles,
 } from 'react-icons/lu';
 import {
   store, useStore, addAsset, toast,
@@ -15,6 +15,7 @@ import { AUDIO_LIBRARY, ensureLibraryAudio, previewLibraryAudio, stopPreview } f
 import { assetPointerProps } from '../lib/assetDrag.js';
 import { shortTime } from '../lib/time.js';
 import { engine } from '../lib/engine.js';
+import { FxLibrary } from './FxLibrary.jsx';
 
 export const ASSET_TABS = [
   { id: 'media', label: 'Medios', icon: LuImport },
@@ -23,6 +24,7 @@ export const ASSET_TABS = [
   { id: 'effects', label: 'Efectos', icon: LuSparkles },
   { id: 'transitions', label: 'Transiciones', icon: LuArrowLeftRight },
   { id: 'audio', label: 'Audio', icon: LuMusic },
+  { id: 'fxlib', label: 'Biblioteca', icon: LuWandSparkles },
 ];
 
 function Title({ children, hint }) {
@@ -384,6 +386,7 @@ export function AssetsPanel() {
       {tab === 'effects' && <EffectsTab />}
       {tab === 'transitions' && <TransitionsTab />}
       {tab === 'audio' && <AudioTab />}
+      {tab === 'fxlib' && <FxLibrary />}
     </div>
   );
 }

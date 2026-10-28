@@ -16,6 +16,8 @@ import {
   DEFAULT_COLOR, DEFAULT_CROP,
 } from '../lib/presets.js';
 import { Slider, Toggle, Select, ColorField, Segmented, Section, IconBtn } from './ui.jsx';
+import { FxTab, FxLayerEditor } from './FxInspector.jsx';
+import { getItem } from '../lib/fx/registry.js';
 
 const TAB_LABELS = {
   video: 'Video',
@@ -26,15 +28,16 @@ const TAB_LABELS = {
   color: 'Color',
   text: 'Texto',
   effect: 'Efecto',
+  fx: 'Efectos',
 };
 
 function tabsFor(type) {
   switch (type) {
-    case 'video': return ['video', 'crop', 'audio', 'speed', 'color'];
-    case 'image': return ['video', 'crop', 'color'];
-    case 'text': return ['text', 'basic'];
-    case 'sticker': return ['basic'];
-    case 'audio': return ['audio'];
+    case 'video': return ['video', 'crop', 'audio', 'speed', 'color', 'fx'];
+    case 'image': return ['video', 'crop', 'color', 'fx'];
+    case 'text': return ['text', 'basic', 'fx'];
+    case 'sticker': return ['basic', 'fx'];
+    case 'audio': return ['audio', 'fx'];
     case 'effect': return ['effect'];
     default: return [];
   }
@@ -109,7 +112,7 @@ function TransitionSection({ clip, side }) {
       <Select
         label="Tipo"
         value={tr?.type ?? 'none'}
-        options={TRANSITIONS.map((x) => ({ value: x.id, label: x.label }))}
+        options={[...TRANSITIONS, ...(tr && !TRANSITIONS.some((x) => x.id === tr.type) ? [{ id: tr.type, label: getItem('transition', tr.type)?.label ?? tr.type }] : [])].map((x) => ({ value: x.id, label: x.label }))}
         onChange={(v) => applyTransition(v, clip.id, side)}
       />
       {tr && (
@@ -393,6 +396,7 @@ function TextTab({ clip }) {
 }
 
 function EffectTab({ clip }) {
+  if (clip.fxKind) return <FxLayerEditor clip={clip} />;
   return (
     <Section title="Efecto de video">
       <div className="grid grid-cols-3 gap-1.5">
@@ -483,6 +487,7 @@ export default function Inspector({ padRight = false }) {
         {tab === 'color' && <ColorTab clip={clip} />}
         {tab === 'text' && <TextTab clip={clip} />}
         {tab === 'effect' && <EffectTab clip={clip} />}
+        {tab === 'fx' && <FxTab clip={clip} />}
       </div>
     </div>
   );

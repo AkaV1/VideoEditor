@@ -157,6 +157,15 @@ export const AUDIO_LIBRARY = [
       for (let i = 0; i < 90; i++) noise(c, d, { t: Math.random() * 2.7, dur: 0.04, vol: 0.5, type: 'highpass', freq: 1800 });
     },
   },
+  { id: 'sweepdown', group: 'sfx', label: 'Barrido descendente', desc: 'Transición bajando', duration: 1.4, build(c, d) { noise(c, d, { t: 0, dur: 1.2, vol: 0.4, type: 'bandpass', freq: 6000, freqEnd: 300, q: 1.2, attack: 0.05 }); tone(c, d, { type: 'sawtooth', freq: 900, freqEnd: 90, t: 0, dur: 1.1, vol: 0.12, release: 0.3 }); } },
+  { id: 'hit', group: 'sfx', label: 'Golpe de impacto', desc: 'Golpe seco con cola', duration: 1.8, build(c, d) { kick(c, d, 0, 1); noise(c, d, { t: 0, dur: 1.3, vol: 0.5, type: 'lowpass', freq: 3000, freqEnd: 120, q: 0.5 }); tone(c, d, { freq: 55, freqEnd: 30, t: 0, dur: 1.4, vol: 0.5, release: 0.6 }); } },
+  { id: 'bassdrop', group: 'sfx', label: 'Caída de graves', desc: 'Drop sub-grave', duration: 2.2, build(c, d) { tone(c, d, { freq: 140, freqEnd: 28, t: 0, dur: 1.8, vol: 0.8, release: 0.5 }); noise(c, d, { t: 0, dur: 0.3, vol: 0.4, type: 'lowpass', freq: 1500 }); } },
+  { id: 'glitchsfx', group: 'sfx', label: 'Glitch digital', desc: 'Ráfagas entrecortadas', duration: 0.9, build(c, d) { for (let i = 0; i < 14; i++) { const t = i * 0.055 + (i % 3) * 0.01; tone(c, d, { type: i % 2 ? 'square' : 'sawtooth', freq: 300 + ((i * 937) % 2400), t, dur: 0.04, vol: 0.2, release: 0.01 }); if (i % 4 === 0) noise(c, d, { t, dur: 0.05, vol: 0.3, type: 'highpass', freq: 5000 }); } } },
+  { id: 'shutter', group: 'sfx', label: 'Obturador de cámara', desc: 'Foto', duration: 0.5, build(c, d) { noise(c, d, { t: 0, dur: 0.05, vol: 0.6, type: 'highpass', freq: 3000 }); noise(c, d, { t: 0.07, dur: 0.09, vol: 0.5, type: 'bandpass', freq: 1800, q: 2 }); tone(c, d, { type: 'square', freq: 220, t: 0.07, dur: 0.03, vol: 0.2 }); } },
+  { id: 'rewind', group: 'sfx', label: 'Rebobinado', desc: 'Cinta hacia atrás', duration: 1.6, build(c, d) { noise(c, d, { t: 0, dur: 1.4, vol: 0.3, type: 'bandpass', freq: 400, freqEnd: 5000, q: 3, attack: 0.1 }); tone(c, d, { type: 'sawtooth', freq: 120, freqEnd: 1400, t: 0, dur: 1.3, vol: 0.1, release: 0.2 }); } },
+  { id: 'crash', group: 'sfx', label: 'Platillo', desc: 'Crash largo', duration: 3, build(c, d) { noise(c, d, { t: 0, dur: 2.8, vol: 0.5, type: 'highpass', freq: 5500, freqEnd: 3500, q: 0.6 }); noise(c, d, { t: 0, dur: 1.2, vol: 0.3, type: 'bandpass', freq: 9000, q: 0.5 }); } },
+  { id: 'heartbeat', group: 'sfx', label: 'Latido', desc: 'Tensión', duration: 2.4, build(c, d) { [0, 0.28, 1.1, 1.38, 2.0].forEach((t, i) => tone(c, d, { freq: 70, freqEnd: 38, t, dur: 0.22, vol: i % 2 ? 0.5 : 0.8, release: 0.15 })); } },
+  { id: 'stinger', group: 'sfx', label: 'Sonido de transición', desc: 'Whoosh + impacto', duration: 1.6, build(c, d) { noise(c, d, { t: 0, dur: 0.7, vol: 0.4, type: 'bandpass', freq: 500, freqEnd: 7000, q: 1, attack: 0.3 }); kick(c, d, 0.72, 0.9); noise(c, d, { t: 0.72, dur: 0.8, vol: 0.3, type: 'lowpass', freq: 2500, freqEnd: 200 }); } },
 ];
 
 // -------------------------------------------------------------- render

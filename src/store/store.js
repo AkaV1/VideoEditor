@@ -722,6 +722,15 @@ export function toggleTrack(trackId, prop) {
 }
 
 // ---------------------------------------------------------------- marcadores
+/** Añade varias marcas a la vez (una sola entrada del historial). */
+export function addMarkers(times) {
+  mutate((d) => {
+    const all = [...d.markers];
+    for (const t of times) if (!all.some((m) => Math.abs(m - t) < 0.05)) all.push(t);
+    return { markers: all.sort((a, b) => a - b) };
+  });
+}
+
 export function addMarker(time) {
   mutate((d) => {
     const t = Math.round(time * 100) / 100;

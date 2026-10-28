@@ -4,6 +4,7 @@ import { store, getState, projectSize, pause } from '../store/store.js';
 import { Scratch, drawFrame, clipBox, naturalSize } from './render.js';
 import { evalVolume } from './keyframes.js';
 import { clamp } from './time.js';
+import { buildAudioChain } from './fx/audiofx.js';
 
 const pitchFactor = (c) => (c.type === 'audio' && c.audio.pitch ? Math.pow(2, c.audio.pitch / 12) : 1);
 /** Velocidad de lectura de la fuente respecto al tiempo del proyecto. */
@@ -91,6 +92,23 @@ class Engine {
     } else e.gain.connect(master);
   }
 
+  /** Inserta (o quita) la cadena de efectos de audio del clip entre el filtro y la ganancia. */
+  applyAudioFx(e, list) {
+    const sig = JSON.stringify(list || []);
+    if (e.fxSig === sig || !this.audio) return;
+    e.fxSig = sig;
+    try { e.lp.disconnect(); } catch { /* sin conexiones */ }
+    e.chain?.dispose();
+    e.chain = null;
+    let chain = null;
+    try { chain = buildAudioChain(this.audio.ctx, list); } catch { chain = null; }
+    if (chain) {
+      e.lp.connect(chain.input);
+      chain.output.connect(e.gain);
+      e.chain = chain;
+    } else e.lp.connect(e.gain);
+  }
+
   setMonitor(v) {
     if (this.audio) this.audio.monitor.gain.value = v;
   }
@@ -153,6 +171,7 @@ class Engine {
       e.lp?.disconnect();
       e.gain?.disconnect();
       e.pan?.disconnect();
+      e.chain?.dispose();
     } catch {
       /* ya desconectado */
     }
@@ -217,6 +236,7 @@ class Engine {
 
         // Cadena de audio por clip
         if (e.gain) {
+          this.applyAudioFx(e, c.audioFx);
           const a = c.audio;
           let g = evalVolume(c, local) / 100;
           if (a.fadeIn > 0 && local < a.fadeIn) g *= clamp(local / a.fadeIn, 0, 1);

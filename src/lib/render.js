@@ -3,6 +3,8 @@
 import { blendOp, fontCss, lutCss } from './presets.js';
 import { clamp } from './time.js';
 import { evalTransform } from './keyframes.js';
+import { clipPasses, transitionStep, animStep, pickTextFx, runGL, layer, applyFxClip } from './fx/apply.js';
+import { drawTextFx } from './fx/textfx.js';
 
 const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
@@ -78,7 +80,7 @@ function hexWithAlpha(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-function drawText(ctx, clip, k, L) {
+function drawText(ctx, clip, k, L, local = 0) {
   const st = clip.style;
   const emoji = clip.type === 'sticker';
   const size = st.size * k;
@@ -90,6 +92,11 @@ function drawText(ctx, clip, k, L) {
     if (ctx.roundRect) ctx.roundRect(-L.w / 2, -L.h / 2, L.w, L.h, r);
     else ctx.rect(-L.w / 2, -L.h / 2, L.w, L.h);
     ctx.fill();
+  }
+  const tfx = !emoji ? pickTextFx(clip, local) : null;
+  if (tfx && drawTextFx(ctx, clip, k, L, local, tfx, { fontString })) {
+    ctx.restore();
+    return;
   }
   ctx.font = fontString(st, k, emoji);
   if ('letterSpacing' in ctx) ctx.letterSpacing = `${(st.letterSpacing || 0) * k}px`;
@@ -249,14 +256,14 @@ function drawClip(ctx, W, H, k, clip, t, src, scratch, measureCtx) {
   let rot = (tf.rotation * Math.PI) / 180;
   let wipe = null;
 
-  const st = { alpha, sc, dx, dy, rot, wipe: null };
+  const st = { alpha, sc, dx, dy, rot, wipe: null, sx: 1, sy: 1, fx: null, dip: null };
+  const tr = (t0, p, out) => { if (!transitionStep(st, t0, p, out, W, H, local, clip.duration)) applyTr(st, t0.type, p, out, W, H); };
+  animStep(st, clip, local, W, H);
   const tin = clip.transitionIn;
-  if (tin && tin.duration > 0 && local < tin.duration) applyTr(st, tin.type, clamp(local / tin.duration, 0, 1), false, W, H);
+  if (tin && tin.duration > 0 && local < tin.duration) tr(tin, clamp(local / tin.duration, 0, 1), false);
   const tout = clip.transitionOut;
   const remain = clip.duration - local;
-  if (tout && tout.duration > 0 && remain < tout.duration) {
-    applyTr(st, tout.type, clamp(remain / tout.duration, 0, 1), true, W, H);
-  }
+  if (tout && tout.duration > 0 && remain < tout.duration) tr(tout, clamp(remain / tout.duration, 0, 1), true);
   ({ alpha, sc, dx, dy, rot, wipe } = st);
   if (alpha <= 0.001 || sc === 0) return;
 
@@ -265,19 +272,43 @@ function drawClip(ctx, W, H, k, clip, t, src, scratch, measureCtx) {
   if (isText) L = layoutText(measureCtx, clip, k);
   else if (!src) return;
 
+  const passes = [...clipPasses(clip, local, W, H), ...(st.fx || [])];
+  const paint = (c2) => {
+    if (wipe) {
+      c2.beginPath();
+      c2.rect(wipe[0], wipe[1], wipe[2], wipe[3]);
+      c2.clip();
+    }
+    c2.translate(W / 2 + dx, H / 2 + dy);
+    c2.rotate(rot);
+    c2.scale(sc * st.sx * (tf.flipH ? -1 : 1), sc * st.sy * (tf.flipV ? -1 : 1));
+    if (isText) drawText(c2, clip, k, L, local);
+    else drawVisual(c2, clip, src, W, H, scratch);
+  };
+  if (passes.length || st.dip) {
+    // Ruta con capa propia: el clip se dibuja aislado, se le aplican los efectos en GPU y se compone.
+    const ly = layer('clip', W, H);
+    ly.ctx.save();
+    paint(ly.ctx);
+    ly.ctx.restore();
+    if (st.dip && st.dip[3] > 0) {
+      ly.ctx.globalCompositeOperation = 'source-atop';
+      ly.ctx.fillStyle = `rgba(${st.dip[0]},${st.dip[1]},${st.dip[2]},${clamp(st.dip[3], 0, 1)})`;
+      ly.ctx.fillRect(0, 0, W, H);
+      ly.ctx.globalCompositeOperation = 'source-over';
+    }
+    const res = passes.length ? runGL(ly.canvas, passes, W, H, local) : null;
+    ctx.save();
+    ctx.globalAlpha = clamp(alpha, 0, 1);
+    ctx.globalCompositeOperation = blendOp(tf.blend);
+    ctx.drawImage(res || ly.canvas, 0, 0, W, H);
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.globalAlpha = clamp(alpha, 0, 1);
   ctx.globalCompositeOperation = blendOp(tf.blend);
-  if (wipe) {
-    ctx.beginPath();
-    ctx.rect(wipe[0], wipe[1], wipe[2], wipe[3]);
-    ctx.clip();
-  }
-  ctx.translate(W / 2 + dx, H / 2 + dy);
-  ctx.rotate(rot);
-  ctx.scale(sc * (tf.flipH ? -1 : 1), sc * (tf.flipV ? -1 : 1));
-  if (isText) drawText(ctx, clip, k, L);
-  else drawVisual(ctx, clip, src, W, H, scratch);
+  paint(ctx);
   ctx.restore();
 }
 
@@ -481,7 +512,9 @@ export function drawFrame(ctx, W, H, baseW, state, t, getSource, scratch, measur
     if (tr.hidden || tr.kind === 'audio') continue;
     for (const c of tr.clips) {
       if (t < c.start || t >= c.start + c.duration) continue;
-      if (c.type === 'effect') applyEffect(ctx, W, H, k, c, t - c.start, scratch);
+      if (c.type === 'effect') {
+        if (!(c.fxKind && applyFxClip(ctx, W, H, k, c, t - c.start, scratch))) applyEffect(ctx, W, H, k, c, t - c.start, scratch);
+      }
       else drawClip(ctx, W, H, k, c, t, c.type === 'text' || c.type === 'sticker' ? null : getSource(c), scratch, measureCtx);
     }
   }
