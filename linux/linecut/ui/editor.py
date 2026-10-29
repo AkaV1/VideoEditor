@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import copy
+import atexit
 import hashlib
+import os
+import sys
 import time
 from pathlib import Path
 
@@ -55,6 +58,45 @@ def _find_players() -> list[list[str]]:
     return out
 
 
+_LIVE: set = set()
+
+
+def _kill_live():
+    for p in list(_LIVE):
+        try:
+            p.kill()
+        except Exception:
+            pass
+    _LIVE.clear()
+
+
+atexit.register(_kill_live)
+
+
+def _clean_env() -> dict:
+    """Entorno para los reproductores del sistema: sin las librerías empaquetadas de la app (AppImage/PyInstaller),
+    que pueden romper pw-cat/paplay/aplay."""
+    env = dict(os.environ)
+    root = env.get("APPDIR", "")
+    parts = [x for x in env.get("LD_LIBRARY_PATH", "").split(":")
+             if x and not (root and x.startswith(root)) and "_internal" not in x and "/usr/extra" not in x]
+    if parts:
+        env["LD_LIBRARY_PATH"] = ":".join(parts)
+    else:
+        env.pop("LD_LIBRARY_PATH", None)
+    env.pop("LD_PRELOAD", None)
+    return env
+
+
+def _die_with_parent():
+    """El reproductor muere si la app se cierra (también si se cierra a la fuerza): no queda sonando ni ocupando el dispositivo."""
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").prctl(1, 9)  # PR_SET_PDEATHSIG, SIGKILL
+    except Exception:
+        pass
+
+
 class AudioPlayer:
     """Reproduce la mezcla del proyecto con el reproductor del sistema; si uno falla prueba el siguiente
     y, como último recurso, QAudioSink."""
@@ -67,6 +109,7 @@ class AudioPlayer:
         self.pcm: bytes = b""
         self.started = 0.0
         self.last_t = 0.0
+        self.fails = 0
         self.reset()
 
     def reset(self):
@@ -74,6 +117,7 @@ class AudioPlayer:
         self.stop()
         self.cands = _find_players()
         self.idx = 0
+        self.fails = 0
         self.mix_key = None
         self.sink = None
         self.qt_ok = False
@@ -108,8 +152,11 @@ class AudioPlayer:
             self.pcm = (np.clip(m, -1, 1) * 32767).astype("<i2").tobytes()
         self.mix_key = key
 
-    def play(self, t: float):
+    def play(self, t: float, fresh: bool = False):
         self.stop()
+        if fresh:  # el usuario pulsa «reproducir»: se vuelve a probar desde el primer reproductor
+            self.idx = 0
+            self.fails = 0
         self.last_t = t
         if not self.pcm:
             return
@@ -121,12 +168,14 @@ class AudioPlayer:
             import subprocess
             import threading
             try:
+                kw = {"preexec_fn": _die_with_parent} if sys.platform.startswith("linux") else {}
                 p = subprocess.Popen(self.cands[self.idx], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                                     stderr=subprocess.DEVNULL)
+                                     stderr=subprocess.DEVNULL, env=_clean_env(), **kw)
             except OSError:
                 self.idx += 1
                 return self.play(t)
             self.proc = p
+            _LIVE.add(p)
             self.started = time.monotonic()
 
             def feed():
@@ -147,7 +196,11 @@ class AudioPlayer:
         p = self.proc
         if p is not None and p.poll() not in (None, 0) and time.monotonic() - self.started < 3.0:
             self.proc = None
-            self.idx += 1
+            _LIVE.discard(p)
+            self.fails += 1
+            if self.fails >= 2:  # un fallo suelto (dispositivo ocupado un instante) no descarta el reproductor
+                self.idx += 1
+                self.fails = 0
             self.play(t)
             return True
         return False
@@ -156,8 +209,10 @@ class AudioPlayer:
         if self.proc is not None:
             try:
                 self.proc.kill()
+                self.proc.wait(timeout=1)
             except Exception:
                 pass
+            _LIVE.discard(self.proc)
             self.proc = None
         if self.sink is not None:
             try:
@@ -469,7 +524,7 @@ class Editor(QWidget):
         self._show_audio_state()
         self.play_b.setText("⏸")
         self._play_t0, self._play_wall = self.t, time.monotonic()
-        self.audio.play(self.t)
+        self.audio.play(self.t, fresh=True)
         self.timer.start()
 
     def _show_audio_state(self):

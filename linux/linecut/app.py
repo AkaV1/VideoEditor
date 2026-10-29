@@ -97,6 +97,10 @@ class MainWindow(QMainWindow):
         TutorialDialog(self).exec()
 
     def closeEvent(self, e):
+        try:
+            self.editor.audio.stop()
+        except Exception:
+            pass
         if self.editor.doc is not None:
             self.editor.stop()
             storage.save(self.editor.doc)
