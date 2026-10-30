@@ -5,6 +5,7 @@ import copy
 import atexit
 import hashlib
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -86,6 +87,29 @@ def _clean_env() -> dict:
         env.pop("LD_LIBRARY_PATH", None)
     env.pop("LD_PRELOAD", None)
     return env
+
+
+def _log_path() -> Path:
+    from ..util import data_dir
+    return data_dir() / "audio.log"
+
+
+def _log_file():
+    try:
+        f = _log_path()
+        if f.exists() and f.stat().st_size > 200_000:
+            f.unlink()
+        return open(f, "ab")
+    except Exception:
+        return subprocess.DEVNULL
+
+
+def _log(msg: str):
+    try:
+        with open(_log_path(), "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%H:%M:%S')} {msg}\n")
+    except Exception:
+        pass
 
 
 def _die_with_parent():
@@ -170,8 +194,10 @@ class AudioPlayer:
             try:
                 kw = {"preexec_fn": _die_with_parent} if sys.platform.startswith("linux") else {}
                 p = subprocess.Popen(self.cands[self.idx], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                                     stderr=subprocess.DEVNULL, env=_clean_env(), **kw)
-            except OSError:
+                                     stderr=_log_file(), env=_clean_env(), **kw)
+                _log(f"play {self.cands[self.idx][0]} t={t:.2f} bytes={len(data)}")
+            except OSError as ex:
+                _log(f"no se pudo lanzar {self.cands[self.idx][0]}: {ex}")
                 self.idx += 1
                 return self.play(t)
             self.proc = p
@@ -197,6 +223,7 @@ class AudioPlayer:
         if p is not None and p.poll() not in (None, 0) and time.monotonic() - self.started < 3.0:
             self.proc = None
             _LIVE.discard(p)
+            _log(f"el reproductor terminó con código {p.returncode}")
             self.fails += 1
             if self.fails >= 2:  # un fallo suelto (dispositivo ocupado un instante) no descarta el reproductor
                 self.idx += 1
@@ -412,6 +439,7 @@ class Editor(QWidget):
         self.t = 0.0
         self.sel = None
         self.paths = storage.media_paths(doc)
+        self._refresh_audio_flags(doc)
         self.provider = FrameProvider(self.paths, doc.data["media"], doc.data["fps"])
         self.assets.attach(doc, self.paths)
         doc.on_change(self._on_change)
@@ -421,6 +449,21 @@ class Editor(QWidget):
         self.timeline.canvas.off = 0
         self._fill_media()
         self._on_change()
+
+    def _refresh_audio_flags(self, doc: Document):
+        """Los proyectos guardados pueden traer mal el dato «tiene audio» (versiones anteriores): se vuelve a leer del archivo."""
+        from ..media import probe
+        for mid, m in doc.data["media"].items():
+            p = self.paths.get(mid)
+            if not p or m.get("kind") not in ("video", "audio"):
+                continue
+            try:
+                has = bool(probe(p).get("hasAudio", True))
+            except Exception:
+                continue
+            if m.get("hasAudio") != has:
+                m["hasAudio"] = has
+        self.audio.mix_key = None
 
     def close_doc(self):
         self.stop()
@@ -534,7 +577,8 @@ class Editor(QWidget):
         elif a.backend == "ninguno":
             self.audio_lbl.setText("🔇 sin salida de audio")
         else:
-            self.audio_lbl.setText(f"🔊 {a.backend}")
+            secs = len(a.pcm) / (audio.SR * 4)
+            self.audio_lbl.setText(f"🔊 {a.backend} · {secs:.1f} s")
 
     def stop(self):
         was = self.playing

@@ -35,7 +35,7 @@ def has_audio_clips(project: dict, media: dict) -> bool:
         if tr["muted"]:
             continue
         for c in tr["clips"]:
-            if c["type"] in ("audio", "video") and media.get(c.get("mediaId"), {}).get("hasAudio", c["type"] == "audio"):
+            if c["type"] in ("audio", "video") and media.get(c.get("mediaId"), {}).get("hasAudio", True):
                 return True
     return False
 
@@ -53,7 +53,7 @@ def mix(project: dict, media: dict, paths: dict[str, str], duration: float | Non
                 continue
             m = media.get(c.get("mediaId"))
             path = paths.get(c.get("mediaId"))
-            if not m or not path or not m.get("hasAudio", c["type"] == "audio"):
+            if not m or not path or not m.get("hasAudio", True):
                 continue
             speed = c["speed"]
             src = decode_segment(path, c["trimStart"], c["duration"] * speed + 0.05)
