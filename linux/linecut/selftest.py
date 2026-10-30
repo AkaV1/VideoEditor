@@ -143,7 +143,7 @@ def _run(out_dir: Path, tmp: str) -> int:
     assert ed.selected_clip().get("fx"), "aplicar efecto del catálogo"
     shot(w, "7-biblioteca")
     ops.add_clip_fx(ed.doc, vcl["id"], "filter", "cinematic")
-    ops.add_clip_fx(ed.doc, vcl["id"], "fx", "vhs")
+    ops.add_clip_fx(ed.doc, vcl["id"], "fx", "vignettefx")
     ops.set_transition(ed.doc, vcl["id"], "in", "cube", None, 0.6)
     ops.set_transition(ed.doc, vcl["id"], "out", "liquid", None, 0.6)
     ops.set_anim(ed.doc, vcl["id"], "in", "zoomSpinA")
@@ -168,7 +168,7 @@ def _run(out_dir: Path, tmp: str) -> int:
     dlg.res.setCurrentIndex(dlg.res.findData(480))
     dlg.show()
     dlg.start()
-    for _ in range(600):
+    for _ in range(2400):
         pump(100)
         if getattr(dlg, "finished_ok", False) or "✖" in dlg.status.text():
             break
