@@ -14,6 +14,7 @@ CLIP_COLORS = {
     "image": ("#2a4d3f", "#3f7a62"),
     "audio": ("#5e5018", "#a8922e"),
     "text": ("#4d3a73", "#7459ad"),
+    "effect": ("#1f4a5c", "#3b8fb0"),
 }
 
 QSS = f"""

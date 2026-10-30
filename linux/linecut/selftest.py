@@ -123,6 +123,44 @@ def _run(out_dir: Path, tmp: str) -> int:
     pid = storage.list_projects()[0]["id"]
     w.open(pid); pump(300)
     assert sum(len(t["clips"]) for t in w.editor.doc.tracks) == n + 1, "reabrir"
+    print('selftest: biblioteca', flush=True)
+    from .fxlib import catalog, ops
+    ed = w.editor
+    assert catalog.total() >= 230, "catálogo"
+    lib = ed.fxlib
+    vcl = next(c for t in ed.doc.tracks for c in t["clips"] if c["type"] == "video")
+    tcl = next(c for t in ed.doc.tracks for c in t["clips"] if c["type"] == "text")
+    ed.select(vcl["id"]); ed.set_time(1.0)
+    ed.inspector.tabs.setCurrentIndex(0)
+    # panel: todas las categorías se rellenan y generan miniaturas
+    for i in range(lib.kind.count()):
+        lib.kind.setCurrentIndex(i); pump(60)
+        assert lib.list.count() > 0 or lib.kind.currentData() == "fav", f"biblioteca vacía: {lib.kind.currentText()}"
+    lib.kind.setCurrentIndex(0); pump(600)
+    lib.list.setCurrentRow(2); pump(200)
+    assert lib.cur and lib.editor_w is not None, "detalle"
+    lib.apply_clip(); pump(100)
+    assert ed.selected_clip().get("fx"), "aplicar efecto del catálogo"
+    shot(w, "7-biblioteca")
+    ops.add_clip_fx(ed.doc, vcl["id"], "filter", "cinematic")
+    ops.add_clip_fx(ed.doc, vcl["id"], "fx", "vhs")
+    ops.set_transition(ed.doc, vcl["id"], "in", "cube", None, 0.6)
+    ops.set_transition(ed.doc, vcl["id"], "out", "liquid", None, 0.6)
+    ops.set_anim(ed.doc, vcl["id"], "in", "zoomSpinA")
+    ops.set_anim(ed.doc, vcl["id"], "loop", "floatL")
+    ops.add_clip_fx(ed.doc, vcl["id"], "audio", "pitchup")
+    ops.add_clip_fx(ed.doc, tcl["id"], "text", "neonT")
+    lid = ops.add_layer(ed.doc, 0.5, "particles", "snow", None, 2.0)
+    lid2 = ops.add_layer(ed.doc, 1.0, "fx", "glow", None, 2.0)
+    assert lid and lid2, "capas de efecto"
+    ed.select(lid2); pump(100)
+    shot(w, "8-capa-efecto")
+    ed.select(vcl["id"]); ed.set_time(0.3); pump(200)
+    ed.inspector.tabs.setCurrentIndex(ed.inspector.tabs.count() - 2)
+    pump(100); shot(w, "9-inspector-biblioteca")
+    for tt in (0.2, 0.8, 1.4, 2.6, 3.6):
+        ed.set_time(tt); pump(80)
+    ed.doc.undo(); ed.doc.redo(); pump(100)
     print('selftest: exportacion', flush=True)
     # exportación real (sin pantalla)
     dlg = ExportDialog(w.editor.doc, w.editor.paths, w)

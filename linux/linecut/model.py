@@ -54,7 +54,7 @@ def base_clip(ctype: str, **extra) -> dict:
     c = {"id": uid("clip"), "type": ctype, "name": "", "start": 0.0, "duration": 3.0, "trimStart": 0.0,
          "speed": 1.0, "transform": dict(DEFAULT_TRANSFORM), "crop": dict(DEFAULT_CROP),
          "color": dict(DEFAULT_COLOR), "audio": dict(DEFAULT_AUDIO), "transitionIn": None,
-         "transitionOut": None, "keyframes": {}, "effects": []}
+         "transitionOut": None, "keyframes": {}, "effects": [], "fx": [], "anim": None, "textFx": [], "audioFx": []}
     c.update(extra)
     return c
 
@@ -71,7 +71,7 @@ def text_clip(template: tuple | None, start: float) -> dict:
 
 
 def track_kind_for(ctype: str) -> str:
-    return "audio" if ctype == "audio" else "video" if ctype in ("video", "image") else "text"
+    return "audio" if ctype == "audio" else "video" if ctype in ("video", "image", "effect") else "text"
 
 
 def clip_end(c: dict) -> float:
@@ -423,3 +423,8 @@ class Document:
     # ------------------------------------------------------------ persistencia
     def to_json(self) -> str:
         return json.dumps(self.data, ensure_ascii=False)
+
+
+def effect_clip(kind: str, fid: str, label: str, start: float, params: dict | None = None, duration: float = 3.0) -> dict:
+    """Capa de efecto (filtro, efecto o partículas) que procesa todo lo que hay debajo."""
+    return base_clip("effect", name=label, start=start, duration=duration, fxKind=kind, fxId=fid, fxParams=dict(params or {}))

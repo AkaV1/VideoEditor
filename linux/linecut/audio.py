@@ -8,6 +8,7 @@ import numpy as np
 
 from .keyframes import eval_volume, any_kf
 from .util import ffmpeg_path
+from .fxlib.audiofx import apply_audio_fx
 
 SR = 44100
 _cache: dict = {}
@@ -71,6 +72,9 @@ def mix(project: dict, media: dict, paths: dict[str, str], duration: float | Non
             L = seg.shape[0]
             if L == 0:
                 continue
+            if c.get("audioFx"):
+                seg = apply_audio_fx(seg, c["audioFx"], f"{c['id']}:{c['trimStart']}:{c['speed']}")
+                L = seg.shape[0]
             gain = np.full(L, c["audio"]["volume"] / 100.0, np.float32)
             if any_kf(c) and c.get("keyframes", {}).get("volume"):
                 ts = np.linspace(0, L / SR, max(2, int(L / SR * 50)))

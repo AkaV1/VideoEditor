@@ -11,6 +11,7 @@ from ..model import BLEND_MODES, FILTERS, TRANSITIONS
 from ..effects import EFFECT_LABELS, MOTION_EFFECTS, PIXEL_EFFECTS, new_effect
 from ..render import font_families
 from .theme import MUTED
+from . import fxinspector
 from .widgets import ColorButton, PropSlider, section_label
 
 
@@ -79,6 +80,10 @@ class Inspector(QWidget):
         self.tabs = QTabWidget()
         self.tabs.setUsesScrollButtons(True)
         t = c["type"]
+        if t == "effect":
+            self.tabs.addTab(self._scroll(fxinspector.build(self, c)), "Capa")
+            self.lay.addWidget(self.tabs, 1)
+            return
         if t == "text":
             self.tabs.addTab(self._scroll(self._tab_text(c)), "Texto")
         if t != "audio":
@@ -88,6 +93,7 @@ class Inspector(QWidget):
             self.tabs.addTab(self._scroll(self._tab_effects(c)), "Efectos")
         if t in ("video", "audio"):
             self.tabs.addTab(self._scroll(self._tab_audio(c)), "Audio")
+        self.tabs.addTab(self._scroll(fxinspector.build(self, c)), "Biblioteca")
         self.tabs.addTab(self._scroll(self._tab_time(c)), "Tiempo")
         self.lay.addWidget(self.tabs, 1)
         self.kfbar = self._kf_bar(c)
@@ -370,7 +376,7 @@ class Inspector(QWidget):
 
     def refresh(self):
         c = self.ed.selected_clip()
-        key = (c["id"], c["type"], tuple(e["type"] for e in c.get("effects", []))) if c else None
+        key = (c["id"], c["type"], tuple(e["type"] for e in c.get("effects", [])), fxinspector.signature(c)) if c else None
         if key != self.built_for:
             same = bool(self.built_for) and bool(key) and self.built_for[0] == key[0] and self.tabs is not None
             idx = self.tabs.currentIndex() if same else 0
@@ -390,6 +396,7 @@ class Inspector(QWidget):
 
     def _sync(self, c):
         loc = self.local(c)
+        fxinspector.sync(self, c)
         for name, wd in self.w.items():
             if name.startswith(("transform.", "audio.", "crop.", "color.")):
                 group, prop = name.split(".")

@@ -10,6 +10,11 @@ from .effects import apply_pixel, motion
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .keyframes import eval_transform
+from .fxlib import runtime as FXR
+from .fxlib import registry as FXREG
+from .fxlib.anim import anim_step
+from .fxlib.particles import draw_particles
+from .fxlib.textfx import pick_textfx, render_text_fx
 from .util import assets_dir, clamp, data_dir
 
 # ------------------------------------------------------------------ fuentes
@@ -267,6 +272,71 @@ def _blend(base: np.ndarray, src: np.ndarray, mode: str) -> np.ndarray:
     return r * 255
 
 
+
+def _to_f(layer: Image.Image) -> np.ndarray:
+    a = np.asarray(layer.convert("RGBA"), dtype=np.float32) / 255.0
+    a[..., :3] *= a[..., 3:4]
+    return a
+
+
+def _from_f(a: np.ndarray, opaque: bool):
+    al = np.clip(a[..., 3:4], 0, 1)
+    rgb = np.where(al > 1e-4, a[..., :3] / np.maximum(al, 1e-4), 0)
+    if opaque:
+        rgb = rgb * al  # sobre negro
+        return Image.fromarray((np.clip(rgb, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB")
+    out = np.concatenate([np.clip(rgb, 0, 1), al], -1)
+    return Image.fromarray((out * 255 + 0.5).astype(np.uint8), "RGBA")
+
+
+def _clip_gfx(layer: Image.Image, clip: dict, extra: list, local: float, k: float) -> Image.Image:
+    """Efectos/filtros del catálogo del clip + pasadas de transición/animación."""
+    passes = FXR.clip_passes(clip, local, layer.width, layer.height) + list(extra or [])
+    if not passes:
+        return layer
+    opaque = layer.mode == "RGB"
+    arr = _to_f(layer)
+    for f in clip.get("fx") or []:
+        if f.get("off"):
+            continue
+        it = FXREG.get_item(f.get("kind", "fx"), f["id"])
+        if it and it.get("hold"):
+            arr = FXR.hold_source(f"{clip['id']}:{f['id']}", it, f.get("p"), local, arr)
+    out = FXR.run_passes(arr, passes, local, ns=clip["id"])
+    return _from_f(out, opaque)
+
+
+def _dip(layer: Image.Image, dip) -> Image.Image:
+    r, g, b, amt = dip
+    amt = max(0.0, min(1.0, amt))
+    if amt <= 0.002:
+        return layer
+    rgba = layer.convert("RGBA")
+    a = np.asarray(rgba, dtype=np.float32)
+    a[..., :3] = a[..., :3] * (1 - amt) + np.array([r, g, b], np.float32) * amt
+    out = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), "RGBA")
+    return out.convert("RGB") if layer.mode == "RGB" else out
+
+
+def apply_effect_clip(canvas: np.ndarray, clip: dict, local: float, k: float):
+    """Capa de efecto: procesa todo lo dibujado debajo (filtro, efecto o partículas)."""
+    H, W = canvas.shape[:2]
+    tf = eval_transform(clip, local)
+    op = max(0.0, min(1.0, tf["opacity"] / 100.0))
+    if op <= 0.002:
+        return
+    base = np.concatenate([canvas.astype(np.float32) / 255.0, np.ones((H, W, 1), np.float32)], -1)
+    kind, fid, prm = clip.get("fxKind"), clip.get("fxId"), clip.get("fxParams")
+    if kind == "particles":
+        if FXR.perf["low"] and fid in ("fog", "smoke", "fire"):
+            return
+        out = draw_particles(base, local, fid, prm, k=W / 1280.0)
+    else:
+        out = FXR.apply_fx_layer(base, kind, fid, prm, local, clip["duration"], key=clip["id"])
+    res = base * (1 - op) + out * op if op < 0.999 else out
+    canvas[...] = (np.clip(res[..., :3], 0, 1) * 255 + 0.5).astype(np.uint8)
+
+
 def draw_clip(canvas: np.ndarray, clip: dict, local: float, k: float, layer: Image.Image):
     """Compone `layer` (RGBA) sobre `canvas` (H,W,3 uint8) aplicando transformación y transiciones."""
     H, W = canvas.shape[:2]
@@ -279,12 +349,18 @@ def draw_clip(canvas: np.ndarray, clip: dict, local: float, k: float, layer: Ima
         st["dy"] += mdy * k
         st["sc"] *= msc
         st["rot"] += mrot
+    st["gfx"] = []
+    anim_step(st, clip, local, W, H)
     tin, tout = clip.get("transitionIn"), clip.get("transitionOut")
     if tin and tin["duration"] > 0 and local < tin["duration"]:
-        apply_transition(st, tin["type"], clamp(local / tin["duration"], 0, 1), False, W, H)
+        p_ = clamp(local / tin["duration"], 0, 1)
+        if not FXR.transition_step(st, tin, p_, False, W, H, local, tin["duration"]):
+            apply_transition(st, tin["type"], p_, False, W, H)
     remain = clip["duration"] - local
     if tout and tout["duration"] > 0 and remain < tout["duration"]:
-        apply_transition(st, tout["type"], clamp(remain / tout["duration"], 0, 1), True, W, H)
+        p_ = clamp(remain / tout["duration"], 0, 1)
+        if not FXR.transition_step(st, tout, p_, True, W, H, local, tout["duration"]):
+            apply_transition(st, tout["type"], p_, True, W, H)
     alpha = clamp(st["alpha"], 0, 1)
     sc = st["sc"]
     if alpha <= 0.001 or sc <= 0.001:
@@ -292,13 +368,18 @@ def draw_clip(canvas: np.ndarray, clip: dict, local: float, k: float, layer: Ima
     mode = tf.get("blend", "normal")
     if st.get("fx"):
         layer = _fx_layer(layer, st["fx"], local, k)
+    if st.get("gfx") or clip.get("fx"):
+        layer = _clip_gfx(layer, clip, st.get("gfx"), local, k)
+    if st.get("dip"):
+        layer = _dip(layer, st["dip"])
     if layer.mode == "RGB" and (st["wipe"] or mode != "normal" or abs(st["rot"]) > 0.01):
         layer = layer.convert("RGBA")  # estos casos necesitan canal alfa
     if tf.get("flipH"):
         layer = layer.transpose(Image.FLIP_LEFT_RIGHT)
     if tf.get("flipV"):
         layer = layer.transpose(Image.FLIP_TOP_BOTTOM)
-    nw, nh = max(1, int(round(layer.width * sc))), max(1, int(round(layer.height * sc)))
+    nw = max(1, int(round(layer.width * sc * st.get("sx", 1.0))))
+    nh = max(1, int(round(layer.height * sc * st.get("sy", 1.0))))
     if nw > 6000 or nh > 6000:
         return
     if (nw, nh) != layer.size:
@@ -361,8 +442,19 @@ def render_frame(project: dict, t: float, W: int, H: int, provider, base_w: int 
     canvas = np.zeros((H, W, 3), np.uint8)
     for c in active_clips(project, t):
         local = t - c["start"]
+        if c["type"] == "effect":
+            apply_effect_clip(canvas, c, local, k)
+            continue
         if c["type"] == "text":
             layer = render_text(c, k)
+            tfx = pick_textfx(c, local) if layer is not None else None
+            if tfx is not None:
+                try:
+                    alt = render_text_fx(c, k, local, tfx, layer)
+                    if alt is not None:
+                        layer = alt
+                except Exception:
+                    pass
         else:
             fr = provider.frame(c, local, W, H)
             if fr is None:
@@ -390,6 +482,8 @@ def clip_box(project: dict, clip: dict, t: float, W: int, H: int, provider) -> t
     """(cx, cy, w, h, rot) del clip en el lienzo W×H, para dibujar los tiradores de selección."""
     k = W / float(_project_w(project))
     local = t - clip["start"]
+    if clip["type"] == "effect":
+        return None
     tf = eval_transform(clip, local)
     if clip["type"] == "text":
         im = render_text(clip, k)

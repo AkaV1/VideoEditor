@@ -22,6 +22,7 @@ from ..media import FrameProvider, kind_of
 from ..model import (RATIOS, TEXT_TEMPLATES, Document, clip_end, media_clip, text_clip)
 from ..util import fmt_time
 from .assets_cache import AssetCache
+from .fxlibrary import FxLibrary
 from .inspector import Inspector
 from .preview import PreviewView
 from .timeline import Timeline
@@ -298,8 +299,10 @@ class Editor(QWidget):
             tl.addWidget(b)
         tl.addStretch(1)
         left.addTab(tw, "Texto")
-        left.setMinimumWidth(250)
-        left.setMaximumWidth(340)
+        self.fxlib = FxLibrary(self)
+        left.addTab(self.fxlib, "Biblioteca")
+        left.setMinimumWidth(270)
+        left.setMaximumWidth(400)
 
         self.preview = PreviewView(self)
         self.preview.select_clip.connect(self.select)
@@ -319,7 +322,7 @@ class Editor(QWidget):
         top.addWidget(centre)
         top.addWidget(self.inspector)
         top.setStretchFactor(1, 1)
-        top.setSizes([280, 700, 340])
+        top.setSizes([320, 660, 340])
 
         self.timeline = Timeline(self)
         self.timeline.canvas.seek.connect(self.set_time)
@@ -504,6 +507,7 @@ class Editor(QWidget):
         if self.ratio.currentData() != r:
             self.ratio.setCurrentIndex(max(0, self.ratio.findData(r)))
         self.inspector.refresh()
+        self.fxlib.refresh()
         self.timeline.canvas.update()
         self.timeline.sync_bar()
         self._update_time()
