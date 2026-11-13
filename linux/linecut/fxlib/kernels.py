@@ -876,3 +876,9 @@ def k_curl(c):
     curled = np.concatenate([b[..., :3] * (sh * 0.9)[..., None] + 0.07 * b[..., 3:4] * (1.0 - sh)[..., None], b[..., 3:]], -1)
     out = np.where((~left & (d < PI * R))[..., None], curled, out)
     return np.where(left[..., None], c.tex, out).astype(F)
+
+
+@kernel
+def k_shatter(c):
+    from .shatter import render
+    return render(c.tex, c.g("uProg"), int(round(c.g("uB"))), c.g("uAmt", 1.0), c.W, c.H)

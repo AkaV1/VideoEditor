@@ -461,6 +461,14 @@ trans("particlesT", "organica", "Partículas", params=[P["amount"], color("#ffd3
 trans("dissolveT", "organica", "Disolución de ruido", build=lambda pr, c: [ps("dissolve", {"uProg": c.p, "uB": 3, "uAmt": 0.4, "uEdge": (1, 1, 1), "uTime": c.t})])
 
 
+def _shard(mode):
+    return lambda pr, c: [ps("shatter", {"uProg": 1.0 - c.p, "uB": mode, "uAmt": 0.4 + 0.75 * pr.amount})]
+
+
+trans("shatterT", "forma", "Cristal roto", params=[wd(P["amount"], 80)], build=_shard(0))
+trans("dustT", "organica", "Polvo", params=[wd(P["amount"], 80)], build=_shard(1))
+
+
 def build_passes(item: dict, pr, c) -> list:
     b = item.get("build")
     return list(b(pr, c)) if b else []

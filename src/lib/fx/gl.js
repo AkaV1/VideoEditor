@@ -1,7 +1,7 @@
 // Procesador de efectos en GPU (WebGL 1, compatible con casi cualquier WebView de Android).
 // Recibe un canvas 2D, le aplica una cadena de pasadas (shaders) y devuelve el canvas resultante.
 // Todo trabaja con alfa premultiplicado, igual que el canvas 2D, para que las capas transparentes compongan bien.
-import { PRELUDE, KERNELS } from './kernels.js';
+import { PRELUDE, KERNELS, MESH } from './kernels.js';
 
 const VERT = `attribute vec2 aPos; varying vec2 vUv; void main(){ vUv = aPos*0.5+0.5; gl_Position = vec4(aPos,0.,1.); }`;
 
@@ -62,7 +62,8 @@ export class FxGL {
     if (p !== undefined) return p;
     const gl = this.gl;
     const body = KERNELS[name];
-    if (!body) {
+    const mesh = MESH[name];
+    if (!body && !mesh) {
       this.progs.set(name, null);
       return null;
     }
@@ -79,12 +80,27 @@ export class FxGL {
     };
     try {
       const prog = gl.createProgram();
-      gl.attachShader(prog, mk(gl.VERTEX_SHADER, VERT));
-      gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, `${PRELUDE}\n${body}\nvoid main(){ gl_FragColor = fx(vUv); }`));
-      gl.bindAttribLocation(prog, 0, 'aPos');
+      if (mesh) {
+        gl.attachShader(prog, mk(gl.VERTEX_SHADER, mesh.vs));
+        gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, 'precision mediump float; varying vec2 vUv; varying float vA; uniform sampler2D uTex; void main(){ gl_FragColor = texture2D(uTex, vUv)*vA; }'));
+        gl.bindAttribLocation(prog, 1, 'aC');
+      } else {
+        gl.attachShader(prog, mk(gl.VERTEX_SHADER, VERT));
+        gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, `${PRELUDE}\n${body}\nvoid main(){ gl_FragColor = fx(vUv); }`));
+        gl.bindAttribLocation(prog, 0, 'aPos');
+      }
       gl.linkProgram(prog);
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`Enlace «${name}»: ${gl.getProgramInfoLog(prog)}`);
       p = { prog, loc: new Map() };
+      if (mesh) {
+        // malla estática: un triángulo por entrada (celda, mitad, vértice)
+        const data = [];
+        for (let j = 0; j < mesh.rows; j++) for (let i = 0; i < mesh.cols; i++) for (let k = 0; k < 2; k++) for (let w = 0; w < 3; w++) data.push(i, j, k, w);
+        p.mesh = { buf: gl.createBuffer(), count: data.length / 4 };
+        gl.bindBuffer(gl.ARRAY_BUFFER, p.mesh.buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+      }
     } catch (e) {
       console.warn(e.message);
       FxGL.errors.push(e.message);
@@ -194,7 +210,20 @@ export class FxGL {
       gl.uniform1f(this.uloc(prog, 'uTime'), time);
       gl.uniform1f(this.uloc(prog, 'uAspect'), W / H);
       this.setUniforms(prog, ps.u || {});
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      if (prog.mesh) {
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        gl.bindBuffer(gl.ARRAY_BUFFER, prog.mesh.buf);
+        gl.enableVertexAttribArray(1);
+        gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, prog.mesh.count);
+        gl.disableVertexAttribArray(1);
+        gl.disable(gl.BLEND);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      } else gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       if (ps.feedback && pers && tgt) {
         // guarda el resultado como historial para el siguiente fotograma
         gl.bindFramebuffer(gl.FRAMEBUFFER, pers.fbo);

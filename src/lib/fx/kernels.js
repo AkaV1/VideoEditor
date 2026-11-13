@@ -384,3 +384,78 @@ export const KERNELS = {
       vec4 b = S(vec2(srcx, uv.y)); float sh = .55+.45*cos(a); return vec4(b.rgb*sh*.9+vec3(.07)*b.a*(1.-sh), b.a); }
     return vec4(0.); }`,
 };
+
+// ---------------------------------------------------------------------------------------------------------------
+// «Cristal roto» y «Polvo»: la imagen se parte en triángulos (malla irregular) que se mueven por separado.
+// No son pasadas de pantalla completa: se dibuja una malla (gl.js) y toda la transformación sale del vértice.
+const SHARD_VS = (cols, rows, jit, dust) => `
+precision highp float;
+attribute vec4 aC;            // x,y = celda; z = triángulo (0|1); w = vértice (0..2)
+uniform float uProg;          // 0 = intacta, 1 = deshecha
+uniform float uAmt, uAspect;
+varying vec2 vUv; varying float vA;
+#define COLS ${cols}.
+#define ROWS ${rows}.
+#define JIT ${jit}
+#define DUST ${dust ? 1 : 0}
+float hs(float a, float s){ return fract(sin(a*127.1 + s*311.7)*43758.5453); }
+vec2 vtx(float i, float j){
+  float sd = i*57. + j*113. + 3.;
+  vec2 jt = vec2(hs(sd,1.), hs(sd,2.)) - .5;
+  float m = (i>0. && i<COLS ? 1. : 0.);
+  float n = (j>0. && j<ROWS ? 1. : 0.);
+  return vec2(i + jt.x*2.*JIT*m, j + jt.y*2.*JIT*n);
+}
+vec2 asp(vec2 v){ return vec2(v.x/COLS*uAspect, v.y/ROWS); }
+void main(){
+  float ci = aC.x, cj = aC.y, k = aC.z, w = aC.w;
+  bool fl = hs(ci*31. + cj*17., 4.) > .5;
+  vec2 p00 = vtx(ci,cj), p10 = vtx(ci+1.,cj), p01 = vtx(ci,cj+1.), p11 = vtx(ci+1.,cj+1.);
+  vec2 A, B, C;
+  if (k < .5){ A = p00; B = p10; C = fl ? p11 : p01; }
+  else { A = fl ? p00 : p10; B = p11; C = p01; }
+  vec2 P = w < .5 ? A : (w < 1.5 ? B : C);
+  vec2 cen = asp((A + B + C)/3.);
+  vec2 s = asp(P);
+  float tid = (cj*COLS + ci)*2. + k;
+  float r0 = hs(tid+7., 11.), r1 = hs(tid+7., 12.), r2 = hs(tid+7., 13.), r3 = hs(tid+7., 14.), r4 = hs(tid+7., 15.);
+  float q = uProg;
+  vec2 d; float rot, fx, sc, al, qt;
+#if DUST
+  float u = cen.x/uAspect, v = cen.y;
+  float dl = clamp(u*.55 + (1.-v)*.1 + r0*.35, 0., 1.);
+  qt = clamp((q - dl*.55)/.45, 0., 1.);
+  vec2 wind = normalize(vec2(1., -.42));
+  float sp = (.05 + .34*pow(r2,1.5))*uAspect*uAmt;
+  float e = pow(qt, 1.6);
+  float turb = (r1-.5)*2.*.16*uAspect*e;
+  d = vec2(wind.x*sp*e - wind.y*turb*.5, wind.y*sp*e*.7 + turb + (r3-.3)*.05*e);
+  rot = (r4-.5)*6.*qt; fx = 1.; sc = 1. - .88*pow(qt,.9);
+  al = 1. - smoothstep(.25, 1., qt);
+#else
+  float u = cen.x/uAspect, v = cen.y;
+  vec2 dd = vec2((u-.5)*uAspect, v-.45);
+  float dist = length(dd);
+  float dl = clamp(dist/1.15, 0., 1.)*.8 + r0*.2;
+  qt = clamp((q - dl*.45)/.55, 0., 1.);
+  float ang = atan(dd.y, dd.x) + (r1-.5)*1.3;
+  float sp = (.10 + .34*r2)*uAspect*uAmt;
+  float e = pow(qt, .8);
+  d = vec2(cos(ang)*sp*e, sin(ang)*sp*e*.9 + qt*qt*.55*uAmt);
+  rot = (r3-.5)*2.*PI_*1.4*qt;
+  fx = max(abs(cos(r4*PI_*2.2*qt)), .12);
+  sc = 1. - .40*qt;
+  al = 1. - smoothstep(.55, 1., qt);
+#endif
+  vec2 rel = (s - cen) * vec2(fx*sc, sc);
+  float cr = cos(rot), sr = sin(rot);
+  vec2 pos = cen + d + vec2(rel.x*cr - rel.y*sr, rel.x*sr + rel.y*cr);
+  vUv = vec2(s.x/uAspect, 1. - s.y);
+  vA = al;
+  gl_Position = vec4(pos.x/uAspect*2. - 1., 1. - pos.y*2., 0., 1.);
+}`.replace(/PI_/g, '3.14159265');
+
+export const MESH = {
+  shard: { vs: SHARD_VS(15, 9, 0.42, false), cols: 15, rows: 9 },
+  dust: { vs: SHARD_VS(84, 47, 0.30, true), cols: 84, rows: 47 },
+};

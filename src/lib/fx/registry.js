@@ -282,6 +282,9 @@ trans('rippleT', 'organica', 'Ondulación', { geo: (st, p) => { st.alpha *= Math
 trans('liquid', 'organica', 'Transición líquida', { build: (pr, c) => [pass('dissolve', { uProg: c.p, uB: 1, uAmt: 0.8, uEdge: [0.4, 0.8, 1], uTime: c.t }), pass('wave', { uAmt: (1 - c.p) * pr.amount, uSpd: 1, uA: 10, uB: 0.05, uC: 2, uTime: c.t })] });
 trans('particlesT', 'organica', 'Partículas', { params: [P.amount, { ...P.color, def: '#ffd36b' }], build: (pr, c) => [pass('dissolve', { uProg: c.p, uB: 2, uAmt: 1, uEdge: pr.rgb, uTime: c.t })] });
 trans('dissolveT', 'organica', 'Disolución de ruido', { build: (pr, c) => [pass('dissolve', { uProg: c.p, uB: 3, uAmt: 0.4, uEdge: [1, 1, 1], uTime: c.t })] });
+// La imagen se parte en triángulos que salen despedidos / se deshace en polvo (malla en gl.js, kernels 'shard' y 'dust')
+trans('shatterT', 'forma', 'Cristal roto', { params: [{ ...P.amount, def: 80 }], build: (pr, c) => [pass('shard', { uProg: 1 - c.p, uAmt: 0.4 + 0.75 * pr.amount })] });
+trans('dustT', 'organica', 'Polvo', { params: [{ ...P.amount, def: 80 }], build: (pr, c) => [pass('dust', { uProg: 1 - c.p, uAmt: 0.4 + 0.75 * pr.amount })] });
 
 /** Pasadas de un elemento con parámetros ya normalizados. */
 export function buildPasses(item, pr, c) {
