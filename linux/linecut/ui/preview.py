@@ -1,10 +1,13 @@
 """Vista previa del lienzo con tiradores de transformación (mover, escalar, rotar)."""
 from __future__ import annotations
 
+import copy
 import math
+import threading
+import time
 
 import numpy as np
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QObject, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -14,12 +17,92 @@ from ..render import clip_box, render_frame, active_clips
 from .theme import ACCENT
 
 
+class FrameWorker(QObject):
+    """Renderiza los fotogramas de la vista previa en un hilo aparte: la interfaz nunca se bloquea y, si el render
+    va más lento que la reproducción, se saltan fotogramas (siempre se dibuja el más reciente pedido)."""
+    ready = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.cv = threading.Condition()
+        self.req = None
+        self.res = None
+        self.busy = False
+        self.alive = True
+        self.ema = 0.0
+        self.th = threading.Thread(target=self._run, name="linecut-preview", daemon=True)
+        self.th.start()
+
+    def submit(self, data, t, W, H, provider):
+        with self.cv:
+            self.req = (data, t, W, H, provider)
+            self.cv.notify_all()
+
+    def _run(self):
+        while True:
+            with self.cv:
+                while self.req is None and self.alive:
+                    self.cv.wait()
+                if not self.alive:
+                    return
+                data, t, W, H, provider = self.req
+                self.req = None
+                self.busy = True
+            t0 = time.perf_counter()
+            buf = None
+            try:
+                buf = np.ascontiguousarray(render_frame(data, t, W, H, provider))
+            except Exception:  # noqa: BLE001
+                buf = None
+            dt = time.perf_counter() - t0
+            with self.cv:
+                self.res = (buf, t, W, H)
+                self.busy = False
+                self.ema = dt if self.ema <= 0 else self.ema * 0.65 + dt * 0.35
+                self.cv.notify_all()
+            self.ready.emit()
+
+    def take(self):
+        with self.cv:
+            r, self.res = self.res, None
+            return r
+
+    def idle(self) -> bool:
+        with self.cv:
+            return not self.busy and self.req is None
+
+    def wait_idle(self, timeout=30.0):
+        end = time.monotonic() + timeout
+        with self.cv:
+            while (self.busy or self.req is not None) and time.monotonic() < end:
+                self.cv.wait(0.1)
+
+    def cancel(self):
+        with self.cv:
+            self.req = None
+        self.wait_idle()
+
+    def close(self):
+        with self.cv:
+            self.alive = False
+            self.req = None
+            self.cv.notify_all()
+
+
 class PreviewView(QWidget):
     select_clip = Signal(str)
+    frame_shown = Signal()
+
+    # anchos de la vista previa durante la reproducción (se baja solo si el equipo no llega a los fotogramas por segundo)
+    LEVELS = (960, 720, 540, 400, 300, 220)
 
     def __init__(self, editor, parent=None):
         super().__init__(parent)
         self.ed = editor
+        self.worker = FrameWorker()
+        self.worker.ready.connect(self._on_ready, Qt.ConnectionType.QueuedConnection)
+        self.level = 0
+        self._snap = None
         self.setMinimumSize(320, 180)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMouseTracking(True)
@@ -38,24 +121,63 @@ class PreviewView(QWidget):
         s = min(aw / pw, ah / ph)
         dw, dh = pw * s, ph * s
         self.rect = QRectF((self.width() - dw) / 2, (self.height() - dh) / 2, dw, dh)
-        W = max(160, min(960, int(round(dw / 2) * 2)))
+        W = max(160, min(self.LEVELS[self.level if self.ed.playing else 0], int(round(dw / 2) * 2)))
         H = max(90, int(round(W * ph / pw / 2) * 2))
         return W, H
 
-    def refresh(self):
+    def invalidate(self):
+        """El proyecto cambió: la copia que usa el hilo de render ya no vale."""
+        self._snap = None
+
+    def _data(self):
+        if self._snap is None:
+            d = self.ed.doc.data
+            self._snap = {k: copy.deepcopy(d[k]) for k in ("ratio", "res", "fps", "tracks") if k in d}
+        return self._snap
+
+    def refresh(self, t: float | None = None):
+        """Pide el fotograma de t (o del cabezal). Es asíncrono: se dibuja cuando el hilo de render termina."""
         doc = self.ed.doc
-        if doc is None:
+        if doc is None or self.ed.provider is None:
             return
-        self.W, self.H = self._layout()
-        fr = render_frame(doc.data, self.ed.t, self.W, self.H, self.ed.provider)
-        self._buf = np.ascontiguousarray(fr)
-        self.img = QImage(self._buf.data, self.W, self.H, self.W * 3, QImage.Format.Format_RGB888)
+        W, H = self._layout()
+        self.worker.submit(self._data(), self.ed.t if t is None else t, W, H, self.ed.provider)
+
+    def flush(self):
+        """Espera a que termine el render pendiente y lo muestra (para exportar capturas o pruebas)."""
+        self.refresh()
+        self.worker.wait_idle()
+        self._on_ready()
+
+    def _on_ready(self):
+        r = self.worker.take()
+        if r is None or r[0] is None:
+            return
+        buf, _t, W, H = r
+        self.W, self.H = W, H
+        self._buf = buf
+        self.img = QImage(self._buf.data, W, H, W * 3, QImage.Format.Format_RGB888)
         self.update()
+        self.frame_shown.emit()
+
+    def adapt(self, fps: float):
+        """Ajusta la resolución de la vista previa a la velocidad del equipo (sólo durante la reproducción)."""
+        budget = 1.0 / max(1.0, fps)
+        e = self.worker.ema
+        if e <= 0:
+            return
+        if e > budget * 1.05 and self.level < len(self.LEVELS) - 1:
+            self.level += 1
+            self.worker.ema = 0.0
+        elif e < budget * 0.38 and self.level > 0:
+            self.level -= 1
+            self.worker.ema = 0.0
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
         if self.ed.doc is not None and not self.ed.playing:
             self.refresh()
+
 
     # ------------------------------------------------------------- pintado
     def _f(self) -> float:

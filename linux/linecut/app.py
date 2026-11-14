@@ -105,6 +105,10 @@ class MainWindow(QMainWindow):
             self.editor.stop()
             storage.save(self.editor.doc)
             self.editor.close_doc()
+        try:
+            self.editor.preview.worker.close()
+        except Exception:
+            pass
         super().closeEvent(e)
 
 

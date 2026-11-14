@@ -57,6 +57,10 @@ def _run(out_dir: Path, tmp: str) -> int:
         loop.exec()
 
     def shot(w, name):
+        try:
+            w.editor.preview.flush()
+        except Exception:
+            pass
         w.grab().save(str(out_dir / f"{name}.png"))
 
     ff = ffmpeg_path()
@@ -111,6 +115,24 @@ def _run(out_dir: Path, tmp: str) -> int:
     ed.doc.redo()
     pump()
     shot(w, "4-inspector")
+    # capas: añadir varias, desplazamiento vertical, renombrar, eliminar
+    print('selftest: capas', flush=True)
+    ntr = len(ed.doc.tracks)
+    for k in range(8):
+        ed.doc.add_track("video", 0)
+    pump()
+    cv = ed.timeline.canvas
+    assert len(ed.doc.tracks) == ntr + 8, "añadir capas"
+    assert cv.max_yoff() > 0, "scroll vertical"
+    cv.yoff = cv.max_yoff(); cv.update(); pump()
+    assert cv.add_rect().bottom() <= cv.height() + 1, "botón ＋ Capa visible"
+    shot(w, "4b-capas")
+    cv.yoff = 0; ed.doc.rename_track(ed.doc.tracks[0]["id"], "Overlay")
+    assert ed.doc.tracks[0]["name"] == "Overlay"
+    for _ in range(9):
+        ed.doc.undo()
+    pump()
+    assert len(ed.doc.tracks) == ntr, "deshacer capas"
     # reproducción breve
     ed.set_time(0.0)
     print('selftest: reproduccion', flush=True)

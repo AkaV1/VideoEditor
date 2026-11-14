@@ -5,7 +5,8 @@ import copy
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QMenu, QScrollBar, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (QHBoxLayout, QInputDialog, QMenu, QScrollBar, QSizePolicy, QVBoxLayout,
+                               QWidget)
 
 from ..keyframes import all_times
 from ..model import clip_end
@@ -14,18 +15,21 @@ from .theme import ACCENT, CLIP_COLORS, LINE, MUTED, PANEL, PANEL2
 
 HEAD = 104
 RULER = 26
+ADD_H = 30  # fila final con el botón «＋ Capa»
 
 
 class TimelineCanvas(QWidget):
     seek = Signal(float)
     select = Signal(str)
     needs_scroll_sync = Signal()
+    needs_vscroll_sync = Signal()
 
     def __init__(self, editor, parent=None):
         super().__init__(parent)
         self.ed = editor
         self.pps = 60.0
         self.off = 0.0  # segundos a la izquierda
+        self.yoff = 0.0  # píxeles desplazados en vertical
         self.setMinimumHeight(150)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMouseTracking(True)
@@ -40,7 +44,16 @@ class TimelineCanvas(QWidget):
 
     def th(self) -> float:
         n = max(1, len(self.tracks))
-        return max(36.0, min(60.0, (self.height() - RULER - 4) / n))
+        return max(36.0, min(60.0, (self.height() - RULER - ADD_H - 4) / n))
+
+    def content_h(self) -> float:
+        return RULER + len(self.tracks) * self.th() + ADD_H + 4
+
+    def max_yoff(self) -> float:
+        return max(0.0, self.content_h() - self.height())
+
+    def clamp_y(self):
+        self.yoff = max(0.0, min(self.max_yoff(), self.yoff))
 
     def x_of(self, t: float) -> float:
         return HEAD + (t - self.off) * self.pps
@@ -49,11 +62,16 @@ class TimelineCanvas(QWidget):
         return (x - HEAD) / self.pps + self.off
 
     def row_y(self, i: int) -> float:
-        return RULER + i * self.th()
+        return RULER + i * self.th() - self.yoff
 
     def row_at(self, y: float) -> int:
-        i = int((y - RULER) // self.th())
+        if y < RULER:
+            return -1
+        i = int((y - RULER + self.yoff) // self.th())
         return i if 0 <= i < len(self.tracks) else -1
+
+    def add_rect(self) -> QRectF:
+        return QRectF(8, self.row_y(len(self.tracks)) + 4, HEAD - 16, ADD_H - 8)
 
     def clip_rect(self, c, i) -> QRectF:
         th = self.th()
@@ -68,6 +86,7 @@ class TimelineCanvas(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         doc = self.ed.doc
         p.fillRect(self.rect(), QColor(PANEL))
+        self.clamp_y()
         th = self.th()
         # filas
         for i, tr in enumerate(self.tracks):
@@ -91,8 +110,18 @@ class TimelineCanvas(QWidget):
             p.drawLine(QPointF(x, RULER), QPointF(x, self.height()))
         p.restore()
         # cabeceras de pista
+        p.save()
+        p.setClipRect(QRectF(0, RULER, self.width(), self.height() - RULER))
         for i, tr in enumerate(self.tracks):
             self._head(p, tr, i)
+        r = self.add_rect()
+        p.fillRect(QRectF(0, r.top() - 4, HEAD, ADD_H), QColor("#202026"))
+        pth = QPainterPath(); pth.addRoundedRect(r, 6, 6)
+        p.fillPath(pth, QColor("#2a2a33"))
+        p.setPen(QColor(ACCENT))
+        f = QFont(); f.setPixelSize(12); f.setBold(True); p.setFont(f)
+        p.drawText(r, Qt.AlignmentFlag.AlignCenter, "＋ Capa")
+        p.restore()
         # marcadores y cabezal
         x = self.x_of(self.ed.t)
         if x >= HEAD:
@@ -136,7 +165,8 @@ class TimelineCanvas(QWidget):
         icon = {"video": "🎞", "audio": "♪", "text": "T"}[tr["kind"]]
         f = QFont(); f.setPixelSize(12); p.setFont(f)
         p.setPen(QColor("#c9c9d3"))
-        p.drawText(QRectF(8, y, 40, th), Qt.AlignmentFlag.AlignVCenter, f"{icon} {tr['name']}"[:9])
+        p.drawText(QRectF(8, y, HEAD - 62, th), Qt.AlignmentFlag.AlignVCenter,
+                   p.fontMetrics().elidedText(f"{icon} {tr['name']}", Qt.TextElideMode.ElideRight, HEAD - 62))
         # botones: ocultar/silenciar y bloquear
         for j, (flag, on, off) in enumerate((("muted" if tr["kind"] == "audio" else "hidden",
                                               "🔇" if tr["kind"] == "audio" else "⊘", "🔊" if tr["kind"] == "audio" else "◉"),
@@ -277,6 +307,11 @@ class TimelineCanvas(QWidget):
     def mousePressEvent(self, e):
         pos = e.position()
         if e.button() == Qt.MouseButton.RightButton:
+            if pos.x() < HEAD:
+                i = self.row_at(pos.y())
+                if i >= 0:
+                    self.track_menu(i, e.globalPosition().toPoint())
+                return
             c, i, _ = self.hit(pos)
             if c:
                 self.select.emit(c["id"])
@@ -289,6 +324,9 @@ class TimelineCanvas(QWidget):
             self.seek.emit(max(0.0, self.t_of(pos.x())))
             return
         if pos.x() < HEAD:
+            if pos.y() >= RULER and self.add_rect().contains(pos):
+                self.add_menu(e.globalPosition().toPoint())
+                return
             i = self.row_at(pos.y())
             if i >= 0:
                 tr = self.tracks[i]
@@ -368,6 +406,9 @@ class TimelineCanvas(QWidget):
             t = self.t_of(e.position().x())
             self.pps = max(4.0, min(600.0, self.pps * (1.15 if dy > 0 else 1 / 1.15)))
             self.off = max(0.0, t - (e.position().x() - HEAD) / self.pps)
+        elif self.max_yoff() > 0 and not (e.modifiers() & Qt.KeyboardModifier.ShiftModifier) and dy:
+            self.yoff = max(0.0, min(self.max_yoff(), self.yoff - dy / 120 * 40))
+            self.needs_vscroll_sync.emit()
         else:
             self.off = max(0.0, self.off - (dy or e.angleDelta().x()) / 120 * 60 / self.pps)
         self.needs_scroll_sync.emit()
@@ -386,6 +427,58 @@ class TimelineCanvas(QWidget):
             self.ed.duplicate_selected()
         elif act is a_del:
             self.ed.delete_selected()
+
+    # ---------------------------------------------------------------- capas
+    KINDS = (("video", "🎞 Capa de video / imagen / efectos"), ("text", "T Capa de texto"), ("audio", "♪ Capa de audio"))
+
+    def add_menu(self, gpos, index=None):
+        m = QMenu(self)
+        acts = {m.addAction(label): kind for kind, label in self.KINDS}
+        act = m.exec(gpos)
+        if act in acts:
+            self.ed.doc.add_track(acts[act], index)
+            self.after_tracks()
+
+    def track_menu(self, i, gpos):
+        tr = self.tracks[i]
+        doc = self.ed.doc
+        m = QMenu(self)
+        a_ren = m.addAction("Renombrar…")
+        m.addSeparator()
+        sub_a = m.addMenu("Añadir capa encima")
+        sub_b = m.addMenu("Añadir capa debajo")
+        add = {}
+        for kind, label in self.KINDS:
+            add[sub_a.addAction(label)] = (kind, i)
+            add[sub_b.addAction(label)] = (kind, i + 1)
+        a_up = m.addAction("Subir capa")
+        a_dn = m.addAction("Bajar capa")
+        a_up.setEnabled(i > 0)
+        a_dn.setEnabled(i < len(self.tracks) - 1)
+        m.addSeparator()
+        a_del = m.addAction("Eliminar capa")
+        a_del.setEnabled(len(self.tracks) > 1)
+        act = m.exec(gpos)
+        if act is None:
+            return
+        if act is a_ren:
+            name, ok = QInputDialog.getText(self, "Renombrar capa", "Nombre:", text=tr["name"])
+            if ok:
+                doc.rename_track(tr["id"], name)
+        elif act in add:
+            doc.add_track(*add[act])
+        elif act is a_up:
+            doc.move_track(tr["id"], -1)
+        elif act is a_dn:
+            doc.move_track(tr["id"], 1)
+        elif act is a_del:
+            doc.remove_track(tr["id"])
+        self.after_tracks()
+
+    def after_tracks(self):
+        self.clamp_y()
+        self.needs_vscroll_sync.emit()
+        self.update()
 
     # ------------------------------------------------- soltar medios desde el panel
     def dragEnterEvent(self, e):
@@ -418,12 +511,36 @@ class Timeline(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
+        row = QHBoxLayout()
+        row.setSpacing(0)
         self.canvas = TimelineCanvas(editor)
-        lay.addWidget(self.canvas, 1)
+        row.addWidget(self.canvas, 1)
+        self.vbar = QScrollBar(Qt.Orientation.Vertical)
+        row.addWidget(self.vbar)
+        lay.addLayout(row, 1)
         self.bar = QScrollBar(Qt.Orientation.Horizontal)
         lay.addWidget(self.bar)
         self.bar.valueChanged.connect(self._bar)
+        self.vbar.valueChanged.connect(self._vbar)
         self.canvas.needs_scroll_sync.connect(self.sync_bar)
+        self.canvas.needs_vscroll_sync.connect(self.sync_vbar)
+        self.canvas.setMinimumHeight(110)
+        self._lock = False
+
+    def _vbar(self, v):
+        if self._lock:
+            return
+        self.canvas.yoff = float(v)
+        self.canvas.update()
+
+    def sync_vbar(self):
+        self._lock = True
+        c = self.canvas
+        m = int(c.max_yoff())
+        self.vbar.setRange(0, m)
+        self.vbar.setPageStep(max(1, c.height()))
+        self.vbar.setValue(int(min(c.yoff, m)))
+        self.vbar.setVisible(m > 0)
         self._lock = False
 
     def _bar(self, v):
@@ -445,6 +562,7 @@ class Timeline(QWidget):
     def resizeEvent(self, e):
         super().resizeEvent(e)
         self.sync_bar()
+        self.sync_vbar()
 
     def zoom(self, factor: float):
         c = self.canvas

@@ -391,6 +391,10 @@ class Editor(QWidget):
         self.audio_lbl = QLabel("")
         self.audio_lbl.setStyleSheet("color:#8b8b97;font-size:11px;")
         l.addWidget(self.audio_lbl)
+        self.perf_lbl = QLabel("")
+        self.perf_lbl.setStyleSheet("color:#8b8b97;font-size:11px;")
+        self.perf_lbl.setToolTip("Resolución de la vista previa durante la reproducción (se ajusta sola a la velocidad de tu equipo)")
+        l.addWidget(self.perf_lbl)
         for txt, tip, fn in (("⏮", "Inicio", lambda: self.set_time(0)),
                              ("◀", "Fotograma anterior", lambda: self.step(-1)),
                              ("▶", "Reproducir / pausa (Espacio)", self.toggle_play),
@@ -470,6 +474,10 @@ class Editor(QWidget):
 
     def close_doc(self):
         self.stop()
+        try:
+            self.preview.worker.cancel()
+        except Exception:
+            pass
         if self.provider:
             self.provider.close()
             self.provider = None
@@ -506,10 +514,12 @@ class Editor(QWidget):
         r = self.doc.data["ratio"]
         if self.ratio.currentData() != r:
             self.ratio.setCurrentIndex(max(0, self.ratio.findData(r)))
+        self.preview.invalidate()
         self.inspector.refresh()
         self.fxlib.refresh()
         self.timeline.canvas.update()
         self.timeline.sync_bar()
+        self.timeline.sync_vbar()
         self._update_time()
         if not self.playing:
             self.render_now()
@@ -591,31 +601,43 @@ class Editor(QWidget):
         self.audio.stop()
         if hasattr(self, "play_b"):
             self.play_b.setText("▶")
+        if hasattr(self, "perf_lbl"):
+            self.perf_lbl.setText("")
         if was and self.doc:
+            self.preview.worker.cancel()
             self.render_now()
 
     def _tick(self):
-        if self._rendering:
-            return
-        self._rendering = True
-        try:
-            if self.audio.check(self.t):
-                self._show_audio_state()
-            t = self._play_t0 + (time.monotonic() - self._play_wall)
-            if t >= self.doc.duration:
-                self.t = self.doc.duration
-                self.stop()
-                self._update_time()
-                self.timeline.canvas.update()
-                return
-            self.t = t
-            self.preview.refresh()
-            self.inspector.refresh()
+        """Bucle de reproducción: el tiempo sale del reloj (el audio manda); el render va en otro hilo y se saltan
+        fotogramas si hace falta, así la interfaz no se atasca."""
+        if self.audio.check(self.t):
+            self._show_audio_state()
+        now = time.monotonic()
+        t = self._play_t0 + (now - self._play_wall)
+        if t >= self.doc.duration:
+            self.t = self.doc.duration
+            self.stop()
             self._update_time()
+            self.timeline.canvas.update()
+            return
+        self.t = t
+        pv = self.preview
+        if pv.worker.idle():
+            pv.refresh(t)
+        self._ticks = getattr(self, "_ticks", 0) + 1
+        self._update_time()
+        if self._ticks % 2 == 0:
             self.timeline.canvas.ensure_visible(t)
             self.timeline.canvas.update()
-        finally:
-            self._rendering = False
+        if self._ticks % 12 == 0:
+            self.inspector.refresh()
+        if now - getattr(self, "_adapt_t", 0.0) > 0.7:
+            self._adapt_t = now
+            pv.adapt(self.doc.data["fps"])
+            e = pv.worker.ema
+            if e > 0:
+                fps = min(self.doc.data["fps"], 1.0 / e)
+                self.perf_lbl.setText(f"· {pv.W}×{pv.H} · {fps:.0f} fps")
 
     # ---------------------------------------------------------- operaciones
     def import_dialog(self):

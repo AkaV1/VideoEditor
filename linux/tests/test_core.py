@@ -57,6 +57,21 @@ def main():
     for _it in catalog.items("particles"):
         from linecut.fxlib.particles import draw_particles
         assert _np.isfinite(draw_particles(_img, 1.3, _it["id"], None, 0.1)).all(), _it["id"]
+    # capas: añadir, renombrar, mover, deshacer y eliminar
+    n0 = len(doc.tracks)
+    tid = doc.add_track("video", 0)
+    assert len(doc.tracks) == n0 + 1 and doc.tracks[0]["id"] == tid and doc.tracks[0]["kind"] == "video"
+    t2 = doc.add_track("audio")
+    assert doc.tracks[-1]["id"] == t2 and doc.tracks[-1]["name"] not in [t["name"] for t in doc.tracks[:-1]]
+    assert doc.rename_track(tid, "Overlay") and doc.tracks[0]["name"] == "Overlay"
+    assert doc.move_track(tid, 1) and doc.tracks[1]["id"] == tid and not doc.move_track(t2, 1)
+    doc.undo(); assert doc.tracks[0]["id"] == tid
+    assert doc.remove_track(tid) and doc.remove_track(t2) and len(doc.tracks) == n0
+    for _ in range(5):
+        doc.add_track("video")
+    assert len(doc.tracks) == n0 + 5
+    doc.undo(); doc.undo(); doc.undo(); doc.undo(); doc.undo()
+    assert len(doc.tracks) == n0
     paths = storage.media_paths(doc)
     out = os.path.join(tmp, "out.mp4")
     t0 = time.time()

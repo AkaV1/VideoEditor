@@ -191,6 +191,63 @@ class Document:
         self.data["media"][item["id"]] = item
         self.notify()
 
+    # -------------------------------------------------------------- capas
+    KIND_NAMES = {"text": "Texto", "video": "Video", "audio": "Audio"}
+
+    def add_track(self, kind: str, index: int | None = None) -> str:
+        """Crea una capa nueva. index 0 = la capa más alta; None = según el tipo."""
+        tr = new_track(kind, "")
+
+        def fn(d):
+            n = sum(1 for t in d["tracks"] if t["kind"] == kind) + 1
+            names = {t["name"] for t in d["tracks"]}
+            base = self.KIND_NAMES[kind]
+            name = base if base not in names else f"{base} {n}"
+            while name in names:
+                n += 1
+                name = f"{base} {n}"
+            tr["name"] = name
+            if index is not None:
+                d["tracks"].insert(max(0, min(len(d["tracks"]), index)), tr)
+            elif kind == "audio":
+                d["tracks"].append(tr)
+            else:  # texto/video: encima de las existentes de su tipo
+                idx = next((i for i, t in enumerate(d["tracks"]) if t["kind"] == kind), len(d["tracks"]))
+                d["tracks"].insert(idx, tr)
+
+        self.mutate(fn)
+        return tr["id"]
+
+    def remove_track(self, tid: str) -> bool:
+        def fn(d):
+            if len(d["tracks"]) <= 1:
+                return False
+            i = next((i for i, t in enumerate(d["tracks"]) if t["id"] == tid), -1)
+            if i < 0:
+                return False
+            d["tracks"].pop(i)
+        return self.mutate(fn)
+
+    def move_track(self, tid: str, delta: int) -> bool:
+        def fn(d):
+            ts = d["tracks"]
+            i = next((i for i, t in enumerate(ts) if t["id"] == tid), -1)
+            j = i + delta
+            if i < 0 or not 0 <= j < len(ts):
+                return False
+            ts[i], ts[j] = ts[j], ts[i]
+        return self.mutate(fn)
+
+    def rename_track(self, tid: str, name: str) -> bool:
+        name = (name or "").strip()[:24]
+
+        def fn(d):
+            t = next((t for t in d["tracks"] if t["id"] == tid), None)
+            if not t or not name or t["name"] == name:
+                return False
+            t["name"] = name
+        return self.mutate(fn)
+
     # --------------------------------------------------------------- clips
     def insert_clip(self, clip: dict, track_id: str | None = None) -> str | None:
         kind = track_kind_for(clip["type"])
