@@ -457,5 +457,5 @@ void main(){
 
 export const MESH = {
   shard: { vs: SHARD_VS(15, 9, 0.42, false), cols: 15, rows: 9 },
-  dust: { vs: SHARD_VS(84, 47, 0.30, true), cols: 84, rows: 47 },
+  dust: { vs: SHARD_VS(40, 23, 0.30, true), cols: 40, rows: 23 },
 };

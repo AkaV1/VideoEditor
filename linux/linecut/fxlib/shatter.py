@@ -13,7 +13,7 @@ F = np.float32
 PRESETS = {
     # cols, rows, jitter
     0: dict(cols=15, rows=9, jit=0.42),    # cristal
-    1: dict(cols=84, rows=47, jit=0.30),   # polvo
+    1: dict(cols=40, rows=23, jit=0.30),   # polvo
 }
 _geo: dict = {}
 

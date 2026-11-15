@@ -462,11 +462,13 @@ trans("dissolveT", "organica", "Disolución de ruido", build=lambda pr, c: [ps("
 
 
 def _shard(mode):
-    return lambda pr, c: [ps("shatter", {"uProg": 1.0 - c.p, "uB": mode, "uAmt": 0.4 + 0.75 * pr.amount})]
+    # «Tiempo del efecto»: fracción de la transición que dura la rotura (el resto la imagen ya no está)
+    return lambda pr, c: [ps("shatter", {"uProg": min(1.0, (1.0 - c.p) / max(0.15, (pr.span or 100) / 100.0)),
+                                         "uB": mode, "uAmt": 0.4 + 0.75 * pr.amount})]
 
 
-trans("shatterT", "forma", "Cristal roto", params=[wd(P["amount"], 80)], build=_shard(0))
-trans("dustT", "organica", "Polvo", params=[wd(P["amount"], 80)], build=_shard(1))
+trans("shatterT", "forma", "Cristal roto", params=[wd(P["amount"], 80), P["span"]], build=_shard(0))
+trans("dustT", "organica", "Polvo", params=[wd(P["amount"], 80), P["span"]], build=_shard(1))
 
 
 def build_passes(item: dict, pr, c) -> list:

@@ -13,6 +13,7 @@ def _p(id, label, mn, mx, df, unit="", step=None):
 
 P = {
     "amount": _p("amount", "Intensidad", 0, 100, 60, "%"),
+    "span": _p("span", "Tiempo del efecto", 15, 100, 100, "%"),
     "speed": _p("speed", "Velocidad", 10, 400, 100, "%"),
     "angle": _p("angle", "Ángulo", 0, 360, 0, "°"),
     "size": _p("size", "Tamaño", 5, 100, 50, "%"),

@@ -294,7 +294,8 @@ def _clip_gfx(layer: Image.Image, clip: dict, extra: list, local: float, k: floa
     passes = FXR.clip_passes(clip, local, layer.width, layer.height) + list(extra or [])
     if not passes:
         return layer
-    opaque = layer.mode == "RGB"
+    # las transiciones que deshacen la imagen (cristal/polvo) dejan huecos: la capa debe conservar el alfa
+    opaque = layer.mode == "RGB" and not any(q.get("k") == "shatter" for q in passes)
     arr = _to_f(layer)
     for f in clip.get("fx") or []:
         if f.get("off"):

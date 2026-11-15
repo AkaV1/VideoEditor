@@ -1,6 +1,7 @@
 // Descriptores de parámetros reutilizables y utilidades para leer/normalizar valores.
 export const P = {
   amount: { id: 'amount', label: 'Intensidad', min: 0, max: 100, def: 60, unit: '%' },
+  span: { id: 'span', label: 'Tiempo del efecto', min: 15, max: 100, def: 100, unit: '%' },
   speed: { id: 'speed', label: 'Velocidad', min: 10, max: 400, def: 100, unit: '%' },
   angle: { id: 'angle', label: 'Ángulo', min: 0, max: 360, def: 0, unit: '°' },
   size: { id: 'size', label: 'Tamaño', min: 5, max: 100, def: 50, unit: '%' },
